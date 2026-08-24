@@ -4,10 +4,10 @@
  * A fenced read/mutation API for the browser half, served on this plugin's own
  * prefix route (the same webServer pattern the super-injector's manager uses):
  *
- *   POST /@dsh-external/dsh-diff-stat/api/files.read  { cwd, path }
- *   POST /@dsh-external/dsh-diff-stat/api/undo        { cwd, files }
- *   POST /@dsh-external/dsh-diff-stat/api/open-with   { cwd, path, target }
- *   GET  /@dsh-external/dsh-diff-stat/api/ping
+ *   POST /dsh-diff-stat/api/files.read  { cwd, path }
+ *   POST /dsh-diff-stat/api/undo        { cwd, files }
+ *   POST /dsh-diff-stat/api/open-with   { cwd, path, target }
+ *   GET  /dsh-diff-stat/api/ping
  *
  * Fence semantics follow dsh-file-review: every path resolves against the
  * session workspace root with realpath containment (checked before AND after
@@ -35,7 +35,7 @@ export const name = 'dsh-diff-stat'
 export const inject = ['webServer']
 
 /** The plugin's own API prefix (package name; '/'-safe in a URL path). */
-const API_PREFIX = '/@dsh-external/dsh-diff-stat/api'
+const API_PREFIX = '/dsh-diff-stat/api'
 /** Read cap in bytes; larger text files answer with truncated: true. */
 const READ_CAP = 512 * 1024
 /** Request body cap — undo payloads carry hunks, so allow a few MiB. */

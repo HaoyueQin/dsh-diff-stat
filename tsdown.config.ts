@@ -16,7 +16,7 @@ import type { UserConfig } from 'tsdown'
 
 const require = createRequire(import.meta.url)
 const PROJECT_ROOT = dirname(fileURLToPath(import.meta.url))
-const PLUGIN_ID = '@dsh-external/dsh-diff-stat'
+const PLUGIN_ID = 'dsh-diff-stat'
 
 /** Module specifiers the dsh web shell shares into its frozen module table. */
 const PLATFORM_MODULES = [

@@ -4,7 +4,7 @@
  * route), so every call degrades to null and the card hides the dependent
  * actions. Availability is probed once per page and cached module-wide.
  */
-const BASE = '/@dsh-external/dsh-diff-stat/api'
+const BASE = '/dsh-diff-stat/api'
 
 /**
  * POST one action to the fenced API.

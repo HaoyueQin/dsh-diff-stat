@@ -32,7 +32,7 @@
 
 ```sh
 # npm pack 产物（推荐，绕开 Windows 本地目录 link: junction bug）
-dsh plugin --profile web add dsh-external-dsh-diff-stat-<version>.tgz
+dsh plugin --profile web add dsh-diff-stat-<version>.tgz
 
 # 重启 dsh web 生效
 dsh web
@@ -41,7 +41,7 @@ dsh web
 卸载：
 
 ```sh
-dsh plugin --profile web remove @dsh-external/dsh-diff-stat
+dsh plugin --profile web remove dsh-diff-stat
 ```
 
 ## 开发

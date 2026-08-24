@@ -32,7 +32,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 
 ```sh
 # npm pack tarball (recommended; sidesteps the Windows local-dir link: junction bug)
-dsh plugin --profile web add dsh-external-dsh-diff-stat-<version>.tgz
+dsh plugin --profile web add dsh-diff-stat-<version>.tgz
 
 # restart dsh web to take effect
 dsh web
@@ -41,7 +41,7 @@ dsh web
 Uninstall:
 
 ```sh
-dsh plugin --profile web remove @dsh-external/dsh-diff-stat
+dsh plugin --profile web remove dsh-diff-stat
 ```
 
 ## Development
