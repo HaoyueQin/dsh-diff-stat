@@ -1,7 +1,7 @@
 .badge {
 	display: inline-flex;
 	gap: 6px;
-	margin-left: auto;
+	margin-left: 4px;
 	padding: 0 2px;
 	font: var(--dsw-font-xs-13);
 	font-variant-numeric: tabular-nums;
@@ -17,9 +17,10 @@
 	color: var(--dsw-alias-state-error-primary);
 }
 
-/* 行内文件链接只占自身宽度：行点击回落到 DisclosureRow 的展开切换，
-   只有真正点在路径文本上才触发 openFile */
+/* stock 的 .fileLink 是 flex: 1 1 auto（撑满整行）——这里收回到自身宽度：
+   行点击回落到 DisclosureRow 的展开切换，只有点在路径文本上才触发 openFile */
 .linkFit {
+	flex: none;
 	display: inline-flex;
 	max-width: 340px;
 	overflow: hidden;

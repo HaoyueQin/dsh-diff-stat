@@ -1,7 +1,5 @@
 .peek {
-	margin: 2px 0 6px 30px;
-	max-width: 720px;
-	border: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.25));
+	border: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.2));
 	border-radius: 6px;
 	background: var(--dsw-alias-markdown-code-block);
 	font: var(--dsw-font-markdown-code-block, var(--dsw-font-xs-13));
@@ -17,13 +15,37 @@
 	border-bottom: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));
 }
 
+.barText {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.close {
+	margin-left: auto;
+	display: inline-flex;
+	align-items: center;
+	border: none;
+	background: transparent;
+	color: var(--dsw-alias-label-tertiary);
+	padding: 1px 4px;
+	border-radius: 4px;
+	cursor: pointer;
+	flex: none;
+}
+
+.close:hover {
+	color: var(--dsw-alias-label-primary);
+	background: var(--dsw-alias-fill-hover, rgba(127, 127, 127, 0.08));
+}
+
 .note {
 	padding: 6px 8px;
 	color: var(--dsw-alias-label-secondary);
 }
 
 .body {
-	max-height: 420px;
+	max-height: 320px;
 	overflow: auto;
 	padding: 4px 0;
 	white-space: pre;

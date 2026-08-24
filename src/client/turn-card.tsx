@@ -20,6 +20,7 @@ import { NS, type DiffStatKey } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
 import { DiffWindow } from './diff-window.tsx'
+import { ExternalLinkIcon, EyeIcon, VSCodeIcon } from './icons.tsx'
 import css from './turn-card.module.css'
 
 /** GitHub-language-bar-style accent per extension; unknown extensions fall back to the muted label color. */
@@ -136,11 +137,11 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
   }, [getCwd, sessionId])
 
   const menuItems = useMemo(() => [
-    { id: 'peek', label: t('card.peek') },
-    { id: 'open', label: t('card.openSystem') },
+    { id: 'peek', label: t('card.peek'), icon: <EyeIcon /> },
+    { id: 'open', label: t('card.openSystem'), icon: <ExternalLinkIcon /> },
     ...(hostReady ? [
       { id: 'explorer', label: t('card.showInExplorer'), icon: <IconFolderOpen16 size={13} /> },
-      { id: 'vscode', label: t('card.openInVscode') },
+      { id: 'vscode', label: t('card.openInVscode'), icon: <VSCodeIcon /> },
     ] : []),
     { type: 'separator' as const, id: 'sep-copy' },
     { id: 'copy-abs', label: t('card.copyAbs'), icon: <IconCopyOutline16 size={13} /> },
@@ -250,7 +251,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
                     <DiffWindow diffs={[...file.diffs]} maxHeight={320} />
                   </div>
                 )}
-                {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} />}
+                {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} onClose={() => { togglePeeked(file.path) }} />}
               </div>
             )
           })}

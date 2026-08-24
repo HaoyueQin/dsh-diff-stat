@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { hostCall } from './api.ts'
+import { CloseIcon } from './icons.tsx'
 import { NS } from './locales.ts'
 import css from './file-peek.module.css'
 
@@ -25,6 +26,8 @@ function contentLines(text: string): readonly string[] {
 export type FilePeekProps = {
   path: string
   cwd: string | undefined
+  /** Close the pane; the header's × button and the menu toggle both call it. */
+  onClose: () => void
 } & PropsLocale<typeof NS>
 
 type PeekState =
@@ -37,9 +40,10 @@ type PeekState =
  * Fetch and render one file inside the bounded window.
  * @param props - the absolute path plus the session workspace root for the fence.
  */
-export function FilePeek({ path, cwd, t }: FilePeekProps) {
+export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
   const [state, setState] = useState<PeekState>({ kind: 'loading' })
   const [expanded, setExpanded] = useState(false)
+  const closeLabel = t('peek.collapse')
 
   useEffect(() => {
     let alive = true
@@ -61,13 +65,28 @@ export function FilePeek({ path, cwd, t }: FilePeekProps) {
   }, [path, cwd])
 
   if (state.kind === 'loading') {
-    return <div className={css.peek}><div className={css.note}>{t('peek.loading')}</div></div>
+    return (
+      <div className={css.peek}>
+        <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
+        <div className={css.note}>{t('peek.loading')}</div>
+      </div>
+    )
   }
   if (state.kind === 'error') {
-    return <div className={css.peek}><div className={css.note}>{t('peek.readFailed')}：{state.message}</div></div>
+    return (
+      <div className={css.peek}>
+        <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
+        <div className={css.note}>{t('peek.readFailed')}：{state.message}</div>
+      </div>
+    )
   }
   if (state.kind === 'binary') {
-    return <div className={css.peek}><div className={css.note}>{t('peek.binary', { size: state.size })}</div></div>
+    return (
+      <div className={css.peek}>
+        <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
+        <div className={css.note}>{t('peek.binary', { size: state.size })}</div>
+      </div>
+    )
   }
 
   const lines = contentLines(state.content)
@@ -81,8 +100,9 @@ export function FilePeek({ path, cwd, t }: FilePeekProps) {
   return (
     <div className={css.peek} data-diff-stat-peek="">
       <div className={css.bar}>
-        <span>{path}</span>
+        <span className={css.barText}>{path}</span>
         <span>{t('peek.bytes', { size: state.size })}{state.truncated ? ' · ' + t('peek.truncated') : ''}</span>
+        <button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button>
       </div>
       <div className={css.body}>
         {head.map((line, index) => (
