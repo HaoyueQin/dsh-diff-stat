@@ -135,7 +135,10 @@ export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedF
 
 /** Turn-local successful mutation accumulator; it publishes no view Node. */
 export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState> = {
-  kind: 'diff-stat-changes',
+  // The assembler requires buildLocationData's key to equal this kind — both
+  // are 'diff-stat', which is also the ConversationTurnDataMap key the
+  // turnTail select reads.
+  kind: 'diff-stat',
   match: (event) => {
     if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
     if (event.type === 'tool/call') return { id: String(event.data.turn), role: 'update' }
