@@ -9,7 +9,7 @@
     "lib",
     "cordis.patch.yml"
   ],
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/dsh-client-runtime": ">=0.0.1-rc <2",
     "@deepseek-ai/dsh-client-ui-conversation": ">=0.0.1-rc <2",
