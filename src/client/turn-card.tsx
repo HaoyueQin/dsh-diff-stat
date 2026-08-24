@@ -9,8 +9,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  DiffBlock, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconCopyOutline16, IconFolderClose16, Menu, writeClipboard,
+  IconChevronDownOutline14, IconChevronRightOutline14,
+  IconCopyOutline16, IconFolderOpen16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
@@ -19,7 +19,28 @@ import { basename, type ChangedFile } from './turn-changes.ts'
 import { NS, type DiffStatKey } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
+import { DiffWindow } from './diff-window.tsx'
 import css from './turn-card.module.css'
+
+/** GitHub-language-bar-style accent per extension; unknown extensions fall back to the muted label color. */
+const EXT_COLORS: Record<string, string> = {
+  ts: '#3178c6', tsx: '#3178c6',
+  js: '#f1e05a', jsx: '#f1e05a', mjs: '#f1e05a', cjs: '#f1e05a',
+  rs: '#dea584', py: '#3572a5', md: '#519aba', json: '#cbcb41',
+  css: '#663399', html: '#e34c26', yml: '#cb171e', yaml: '#cb171e',
+}
+
+/** Small file silhouette tinted by the path's extension. */
+function FileIcon({ path }: { path: string }) {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
+  const color = EXT_COLORS[ext] ?? 'var(--dsw-alias-label-tertiary)'
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 1.5h5.2L12.5 4.8v9.7a1 1 0 0 1-1 1h-7.5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" fill={color} />
+      <path d="M9.2 1.5v3.3h3.3" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1" />
+    </svg>
+  )
+}
 
 /** Directory part of a path, for the muted directory segment of a file row. */
 function dirname(path: string): string {
@@ -118,7 +139,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
     { id: 'peek', label: t('card.peek') },
     { id: 'open', label: t('card.openSystem') },
     ...(hostReady ? [
-      { id: 'explorer', label: t('card.showInExplorer') },
+      { id: 'explorer', label: t('card.showInExplorer'), icon: <IconFolderOpen16 size={13} /> },
       { id: 'vscode', label: t('card.openInVscode') },
     ] : []),
     { type: 'separator' as const, id: 'sep-copy' },
@@ -161,7 +182,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
             title={undoState === 'error' ? t('card.undoFailedTitle') : t('card.undoTitle')}
             onClick={undoTurn}
           >
-            {undoState === 'busy' ? t('card.undoing') : undoState === 'done' ? t('card.undone') : undoState === 'error' ? t('card.undoFailed') : t('card.undo')}
+            {undoState === 'busy' ? t('card.undoing') : undoState === 'done' ? t('card.undone') : undoState === 'error' ? t('card.undoFailed') : '↶ ' + t('card.undo')}
           </button>
         )}
       </button>
@@ -175,7 +196,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
             return (
               <div key={file.path} data-diff-stat-file={file.path}>
                 <div className={css.fileRow}>
-                  <span className={css.fileIcon} aria-hidden><IconFolderClose16 size={14} /></span>
+                  <span className={css.fileIcon} aria-hidden><FileIcon path={file.path} /></span>
                   <button
                     type="button"
                     className={css.fileName}
@@ -226,7 +247,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
                 </div>
                 {revealedFile && (
                   <div className={css.diffWrap}>
-                    <DiffBlock diffs={[...file.diffs]} maxLines={16} />
+                    <DiffWindow diffs={[...file.diffs]} maxHeight={320} />
                   </div>
                 )}
                 {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} />}

@@ -1,0 +1,47 @@
+.window {
+	border: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.2));
+	border-radius: 6px;
+	background: var(--dsw-alias-markdown-code-block);
+	overflow: hidden;
+}
+
+.scroll {
+	overflow: auto;
+	padding: 4px 0;
+	white-space: pre;
+	font: var(--dsw-font-markdown-code-block, var(--dsw-font-xs-13));
+	min-width: 100%;
+	width: max-content;
+	min-height: 0;
+}
+
+.line {
+	padding: 0 8px;
+	min-height: var(--dsl-diff-line-height, 18px);
+	color: var(--dsw-alias-label-primary);
+}
+
+.path {
+	color: var(--dsw-alias-label-tertiary);
+	font-weight: 600;
+}
+
+.gap {
+	color: var(--dsw-alias-label-tertiary);
+}
+
+.add {
+	color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 78%, var(--dsw-alias-label-primary));
+	background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 7%, transparent);
+}
+
+.del {
+	color: var(--dsw-alias-state-error-primary);
+	background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, transparent);
+}
+
+.footer {
+	padding: 3px 8px;
+	border-top: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));
+	color: var(--dsw-alias-label-tertiary);
+}

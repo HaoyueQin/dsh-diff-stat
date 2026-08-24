@@ -8,10 +8,22 @@
 	flex: none;
 }
 
+/* 主题自适应的沉稳绿：向文字色混合，亮色主题变暗、暗色主题减刺眼 */
 .add {
-	color: var(--dsw-alias-state-success-primary);
+	color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 78%, var(--dsw-alias-label-primary));
 }
 
 .del {
 	color: var(--dsw-alias-state-error-primary);
+}
+
+/* 行内文件链接只占自身宽度：行点击回落到 DisclosureRow 的展开切换，
+   只有真正点在路径文本上才触发 openFile */
+.linkFit {
+	display: inline-flex;
+	max-width: 340px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	vertical-align: bottom;
 }
