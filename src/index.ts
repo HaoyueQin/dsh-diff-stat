@@ -31,6 +31,9 @@ import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
 export const name = 'dsh-diff-stat'
 
+/** The webServer service hosts this plugin's fenced prefix route. */
+export const inject = ['webServer']
+
 /** The plugin's own API prefix (package name; '/'-safe in a URL path). */
 const API_PREFIX = '/@dsh-external/dsh-diff-stat/api'
 /** Read cap in bytes; larger text files answer with truncated: true. */

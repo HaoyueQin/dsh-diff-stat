@@ -1,50 +1,59 @@
-# dsh-diff-stat
+# DSH Diff Stat
 
-DeepSeek Harness Web 插件：为 `edit`/`write` 工具行提供行内 **+N −M** 徽标，并在每轮结束时给出文件变更汇总卡。点击展开完整 unified diff；Code Dispatch（PTC）嵌套子调用照常工作（参数兜底推导，不依赖 wire diff 视图）。不依赖 git，不依赖任何第三方插件。
+[English](README.md) | [中文](README.zh.md)
 
-## 功能
+[![dsh plugin](https://img.shields.io/badge/dsh-plugin-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![npm](https://img.shields.io/npm/v/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat)
+[![dsh](https://img.shields.io/badge/dsh-%E2%89%A50.1.1--rc-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+![platform](https://img.shields.io/badge/platform-web-8A9CF5?style=flat-square)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue?style=flat-square)](LICENSE)
+![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-success?style=flat-square)
 
-- **行内 +N −M 徽标（R1）**：接管 stock 的 edit/write 工具行（keyed 低优先阴影，卸载自动还原 stock），收起态即见增删行数——运行中用参数推导预估，结算后以 resultView 精确值替换
-- **展开完整 diff**：点击行展开 unified diff，渲染走 stock `DiffBlock` 原语（16 行限高折叠、复制、`└ +A -R` 页脚、主题令牌）
-- **轮末汇总卡（R2）**：每轮消息流尾部折叠条「N 个文件已更改 +X −Y」；展开逐文件行（文件名 · 目录 · ±行数 · 审查 · 打开 ▾ · ∨），同文件多次编辑合并累计
-- **PTC/Code Dispatch 兜底**：嵌套子调用在 wire 上没有任何 diff 视图，插件按工具自身 `presentCall` 语义从参数推导调用时 diff（edit 的 old→new、write 的整文件新增）；`rootCallId+subCallId` 去重防重放双计
-- **撤销（M4）**：一键把本轮改动恢复到轮前状态——hunk 链倒序唯一性回剥、本轮新建文件删除、文件漂移拒绝写入、原子写
-- **内嵌查看（M4）**：「打开 ▾ → 内嵌查看」在条目下方展开限高文件内容窗口（16 行折叠，与 stock DiffBlock 同款交互）
-- **打开系（M4）**：系统打开（本体 `openFile`）+ 资源管理器定位 + VS Code 打开 + 复制绝对/相对路径
-- **中英文**：跟随 Web 界面语言（locale 服务）
+A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin: inline **+N −M** badges on `edit`/`write` tool rows plus a per-turn file change summary card. Full unified diffs on click. Code Dispatch (PTC) nested sub-calls work via argument fallback — no wire diff view required. No git dependency, no third-party plugin dependencies.
 
-## 机制
+## Features
 
-- **R1**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write` 键，priority −1 阴影 shipped 行；diff 数据按「resultView → callView → 参数兜底」三级提取（顺序即合同：窗口截断丢 callView 时仍可从 resultView 渲染）
-- **R2**：`ConversationNodeDefinition` 聚合器（`turn/start` / `tool/call` / `tool/result(append)` / `tool/code-dispatch`）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染；结构遵循官方 `ui-deliverables` 模式
-- **host 半**（可选）：同源前缀路由提供围栏 API——realpath 包含性（解析前后双查）、符号链接拒绝、UTF-8 回环校验、512 KiB 读取截断、原子写；host 半缺席时相关按钮自动隐藏
+- **Inline +N −M badges (R1)**: takes over the stock edit/write rows (keyed lower-priority shadow; uninstall restores stock automatically). Counts show while running from the argument-derived estimate, then switch to the exact result-view hunks on settlement
+- **Full diff on click**: expands a unified diff rendered through the stock `DiffBlock` primitive (16-line capped collapse, copy, `└ +A -R` footer, theme tokens)
+- **Per-turn summary card (R2)**: a collapsible "N files changed +X −Y" bar at each turn's tail; expands to per-file rows (name · directory · ±lines · review · open ▾ · ∨). Same-file edits within a turn merge and accumulate
+- **PTC / Code Dispatch fallback**: nested sub-calls carry no wire diff views; the plugin derives the call-time diff from the tools' own `presentCall` semantics (edit's old→new, write's whole-file create). `rootCallId+subCallId` dedup keeps replays from double-counting
+- **Undo (M4)**: reverts the turn's files to their pre-turn state — reverse uniqueness-checked hunk peeling, deletes files the turn created, rejects drifted files before writing, atomic commits
+- **Inline view (M4)**: 打开 ▾ → View inline expands a height-capped file content window (16-line collapse, the stock DiffBlock interaction)
+- **Open with (M4)**: system open (the stock `openFile`), reveal in Explorer, open in VS Code, copy absolute/relative path
+- **zh / en**: copy follows the Web UI language (locale service)
 
-## 安装
+## How it works
+
+- **R1**: registers the `edit`/`write` keys of the `tool.call.toolview` keyed slot at priority −1 (shadows the shipped rows); diff data follows the authoritative chain resultView → callView → argument fallback (a truncated window that dropped the call head still renders from the result view)
+- **R2**: a `ConversationNodeDefinition` accumulator (`turn/start` / `tool/call` / `tool/result(append)` / `tool/code-dispatch`) publishes Turn data; the `conversation.chat.turnTail` chain claims rendering — modeled on the official `ui-deliverables` plugin
+- **Host half (optional)**: a same-origin prefix route serves a fenced API — realpath containment (checked before and after resolution), symlink rejection, UTF-8 round-trip validation, 512 KiB read cap, atomic writes. When the host half is absent the dependent actions hide themselves
+
+## Install
 
 ```sh
-# npm pack 产物（推荐，绕开 Windows 本地目录 link: junction bug）
+# npm pack tarball (recommended; sidesteps the Windows local-dir link: junction bug)
 dsh plugin --profile web add dsh-external-dsh-diff-stat-<version>.tgz
 
-# 重启 dsh web 生效
+# restart dsh web to take effect
 dsh web
 ```
 
-卸载：
+Uninstall:
 
 ```sh
 dsh plugin --profile web remove @dsh-external/dsh-diff-stat
 ```
 
-## 开发
+## Development
 
 ```sh
-npm install --legacy-peer-deps          # devDependencies（peer 均为 dsh 内部包）
-DSH_CHECKOUT=<dsh checkout> bash scripts/build.sh   # host 半 → lib/（junction 链接 + tsc）
-npm run build:client                    # 浏览器半 → lib/client.js（tsdown）
-npm run typecheck                       # 双端 tsc
+npm install --legacy-peer-deps          # devDependencies (peers are dsh-internal packages)
+DSH_CHECKOUT=<dsh checkout> bash scripts/build.sh   # host half → lib/ (junction links + tsc)
+npm run build:client                    # browser half → lib/client.js (tsdown)
+npm run typecheck                       # both halves via tsc
 ```
 
-里程碑：M0 脚手架 → M1 行内徽标 → M2 PTC 兜底 → M3 轮末卡 → M4 撤销/内嵌查看/打开系 → M5 打磨（本仓库已全部落地）。
+Milestones: M0 skeleton → M1 inline badges → M2 PTC fallback → M3 turn card → M4 undo/inline view/open-with → M5 polish (all landed in this repository).
 
 ## License
 
