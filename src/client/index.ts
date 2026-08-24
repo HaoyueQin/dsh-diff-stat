@@ -53,8 +53,13 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
   })
 
   ctx.conversationEvents.register(turnChangesDefinition)
+  // The turnTail chain is first-wins (ascending priority, lower tries
+  // first): claiming at -1 puts the summary card ahead of ui-deliverables'
+  // produced-files chips; when a turn changed nothing our select returns
+  // null and the stock card falls through unchanged.
   ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
     name: 'conversation.chat.turnTail',
+    priority: -1,
     select: selectChangedFiles,
     inject: () => ({
       getCwd: (sessionId: string | undefined) => (
