@@ -42,7 +42,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Narrow a wire `card:'diff'` view's `diffs` to well-formed hunks (same
  *  validation the stock diff-card model applies). */
-function narrowDiffs(diffs: unknown): DiffHunk[] | null {
+export function narrowDiffs(diffs: unknown): DiffHunk[] | null {
   if (!Array.isArray(diffs) || diffs.length === 0) return null
   for (const hunk of diffs) {
     if (hunk === null || typeof hunk !== 'object') return null
@@ -173,4 +173,34 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   if (block.isError) return null
   const fallback = callTimeDiffs(toolName, block.call?.argsRaw ?? '')
   return fallback === null ? null : { card: { diffs: fallback } }
+}
+/** A wire tool view carrying an optional diff render intent. */
+export interface WireView {
+  readonly card?: unknown
+  readonly diffs?: unknown
+}
+
+/**
+ * The diff hunks for one settled-or-running mutation, in the authoritative
+ * order: applied result hunks, then the call view's intended diff, then the
+ * argument fallback (the Code Dispatch path). The order is the documented
+ * contract — a window that dropped the call head must still render from the
+ * result view, and a PTC sub-call with neither view renders from args.
+ * @returns the hunks, or null when this call carries no diff material.
+ */
+export function mutationHunks(
+  toolName: string,
+  argsRaw: string,
+  callView: WireView | null | undefined,
+  resultView: WireView | null | undefined,
+): DiffHunk[] | null {
+  const result = resultView !== null && resultView !== undefined && resultView.card === 'diff'
+    ? narrowDiffs(resultView.diffs)
+    : null
+  if (result !== null) return result
+  const call = callView !== null && callView !== undefined && callView.card === 'diff'
+    ? narrowDiffs(callView.diffs)
+    : null
+  if (call !== null) return call
+  return callTimeDiffs(toolName, argsRaw)
 }
