@@ -7,7 +7,7 @@
  * actions (撤销 / 内嵌查看 / 定向打开) arrive with the M4 host half and stay
  * hidden while it is absent.
  */
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DiffBlock, IconChevronDownOutline14, IconChevronRightOutline14,
   IconCopyOutline16, IconFolderClose16, Menu, writeClipboard,
@@ -15,6 +15,8 @@ import {
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
+import { hostAvailable, hostCall } from './api.ts'
+import { FilePeek } from './file-peek.tsx'
 import css from './turn-card.module.css'
 
 /** Directory part of a path, for the muted directory segment of a file row. */
@@ -52,7 +54,45 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
   const [expanded, setExpanded] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
+  const [peeked, setPeeked] = useState<ReadonlySet<string>>(() => new Set())
+  const [hostReady, setHostReady] = useState(false)
+  const [undoState, setUndoState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
   const total = useMemo(() => totals(matched), [matched])
+
+  // Host half probe: the dependent actions (撤销/内嵌查看/定向打开) stay
+  // hidden while the server route is absent.
+  useEffect(() => {
+    let alive = true
+    void hostAvailable().then(available => { if (alive) setHostReady(available) })
+    return () => { alive = false }
+  }, [])
+
+  const cwd = useMemo(() => getCwd?.(sessionId), [getCwd, sessionId])
+
+  const togglePeeked = useCallback((path: string) => {
+    setPeeked(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+  }, [])
+
+  /** Undo the whole turn: replay every recorded hunk chain in reverse on the host. */
+  const undoTurn = useCallback(() => {
+    if (undoState === 'busy') return
+    setUndoState('busy')
+    void (async () => {
+      const result = await hostCall<{ ok: boolean }>('undo', {
+        cwd,
+        files: matched.map(file => ({
+          path: file.path,
+          diffs: file.diffs.map(hunk => ({ oldText: hunk.oldText, newText: hunk.newText })),
+        })),
+      })
+      setUndoState(result !== null && result.ok ? 'done' : 'error')
+    })()
+  }, [undoState, cwd, matched])
 
   const toggleRevealed = useCallback((path: string) => {
     setRevealed(prev => {
@@ -73,17 +113,25 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
   }, [getCwd, sessionId])
 
   const menuItems = useMemo(() => [
+    { id: 'peek', label: '内嵌查看' },
     { id: 'open', label: '系统打开' },
+    ...(hostReady ? [
+      { id: 'explorer', label: '资源管理器中显示' },
+      { id: 'vscode', label: '在 VS Code 中打开' },
+    ] : []),
     { type: 'separator' as const, id: 'sep-copy' },
     { id: 'copy-abs', label: '复制绝对路径', icon: <IconCopyOutline16 size={13} /> },
     { id: 'copy-rel', label: '复制相对路径', icon: <IconCopyOutline16 size={13} /> },
-  ], [])
+  ], [hostReady])
 
   const onMenuSelect = useCallback((id: string, path: string) => {
-    if (id === 'open') openFile(path)
+    if (id === 'peek') togglePeeked(path)
+    else if (id === 'open') openFile(path)
+    else if (id === 'explorer') void hostCall('open-with', { cwd, path, target: 'explorer' })
+    else if (id === 'vscode') void hostCall('open-with', { cwd, path, target: 'vscode' })
     else if (id === 'copy-abs') void writeClipboard(path)
     else if (id === 'copy-rel') copyPath(path)
-  }, [openFile, copyPath])
+  }, [openFile, copyPath, togglePeeked, cwd])
 
   if (matched.length === 0) return null
 
@@ -103,7 +151,17 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
           <span className={css.add}>+{total.added}</span>
           <span className={css.del}>−{total.removed}</span>
         </span>
-        {/* 撤销（M4）：host 半的 undo API 就绪后在此接线 */}
+        {hostReady && (
+          <button
+            type="button"
+            className={css.undo + (undoState === 'done' ? ' ' + css.undoDone : '')}
+            disabled={undoState === 'busy' || undoState === 'done'}
+            title={undoState === 'error' ? '撤销失败：文件可能已在此轮之外被改动' : '把这一轮改动的文件恢复到轮前状态'}
+            onClick={undoTurn}
+          >
+            {undoState === 'busy' ? '撤销中…' : undoState === 'done' ? '已撤销' : undoState === 'error' ? '撤销失败' : '撤销'}
+          </button>
+        )}
       </button>
       {expanded && (
         <div className={css.list}>
@@ -169,6 +227,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
                     <DiffBlock diffs={[...file.diffs]} maxLines={16} />
                   </div>
                 )}
+                {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} />}
               </div>
             )
           })}
