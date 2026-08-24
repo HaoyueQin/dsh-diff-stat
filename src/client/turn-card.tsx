@@ -235,6 +235,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
                       onClose={() => { setOpenFilePath(null) }}
                       align="end"
                       compact
+                      portal
                     />
                     <button
                       type="button"
