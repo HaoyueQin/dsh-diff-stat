@@ -1,0 +1,17 @@
+.badge {
+	display: inline-flex;
+	gap: 6px;
+	margin-left: auto;
+	padding: 0 2px;
+	font: var(--dsw-font-xs-13);
+	font-variant-numeric: tabular-nums;
+	flex: none;
+}
+
+.add {
+	color: var(--dsw-alias-state-success-primary);
+}
+
+.del {
+	color: var(--dsw-alias-state-error-primary);
+}

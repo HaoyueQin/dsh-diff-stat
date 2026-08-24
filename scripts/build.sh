@@ -51,6 +51,16 @@ link_pkg schemastery vendor/schemastery
 link_pkg @deepseek-ai/dsh-tools packages/core/tools
 link_pkg @deepseek-ai/dsh-llm packages/llm/llm
 link_pkg @deepseek-ai/dsh-system-prompt packages/core/system-prompt
+# client 半类型来源（tsconfig.client.json 的 import 解析）
+link_pkg @deepseek-ai/dsh-client-runtime packages/client/runtime
+link_pkg @deepseek-ai/dsh-client-ui-slots packages/client/ui-slots
+link_pkg @deepseek-ai/dsh-client-ui-primitives packages/client/ui-primitives
+link_pkg @deepseek-ai/dsh-client-ui-tool packages/client/ui-tool
+# 在 CHECKOUT 内做相对 find：无论 CHECKOUT 是 C:\ 还是 /c/ 风格都成立
+CLSX_REL=$(cd "$CHECKOUT" && find node_modules/.pnpm -maxdepth 1 -type d -iname 'clsx@*' 2>/dev/null | head -1)
+if [ -n "$CLSX_REL" ]; then
+  link_pkg clsx "$CLSX_REL/node_modules/clsx"
+fi
 # @types/node（编译类型；checkout 自带）
 link_pkg @types/node node_modules/@types/node
 
