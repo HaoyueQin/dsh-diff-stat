@@ -26,10 +26,7 @@ export const zh = {
   'peek.binary': '二进制文件（{size} 字节），无法预览',
   'peek.bytes': '{size} 字节',
   'peek.truncated': '已截断（前 512 KiB）',
-  'peek.more': '… 其余 {count} 行',
-  'peek.collapse': '收起',
-  'row.expandDiff': '展开 {name} 的差异',
-  'row.collapseDiff': '收起差异',
+  'peek.close': '关闭',
 }
 
 /** English dictionary (same key set). */
@@ -55,10 +52,7 @@ export const en: Record<DiffStatKey, string> = {
   'peek.binary': 'Binary file ({size} bytes); no preview',
   'peek.bytes': '{size} bytes',
   'peek.truncated': 'truncated (first 512 KiB)',
-  'peek.more': '… {count} more lines',
-  'peek.collapse': 'Collapse',
-  'row.expandDiff': 'Expand diff for {name}',
-  'row.collapseDiff': 'Collapse diff',
+  'peek.close': 'Close',
 }
 
 /** Union of this namespace's dictionary keys. */

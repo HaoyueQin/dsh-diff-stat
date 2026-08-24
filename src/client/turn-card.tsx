@@ -237,14 +237,6 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
                       compact
                       portal
                     />
-                    <button
-                      type="button"
-                      className={css.action + (revealedFile ? ' ' + css.actionActive : '')}
-                      aria-label={revealedFile ? t('row.collapseDiff') : t('row.expandDiff', { name })}
-                      onClick={() => { toggleRevealed(file.path) }}
-                    >
-                      {revealedFile ? '∧' : '∨'}
-                    </button>
                   </span>
                 </div>
                 {revealedFile && (

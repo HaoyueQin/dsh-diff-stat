@@ -12,9 +12,6 @@ import { CloseIcon } from './icons.tsx'
 import { NS } from './locales.ts'
 import css from './file-peek.module.css'
 
-/** Same collapse geometry as the stock DiffBlock chat cap. */
-const MAX_LINES = 16
-
 /** Split text into content lines (trailing newline is a terminator, not a blank line). */
 function contentLines(text: string): readonly string[] {
   if (text === '') return []
@@ -42,8 +39,7 @@ type PeekState =
  */
 export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
   const [state, setState] = useState<PeekState>({ kind: 'loading' })
-  const [expanded, setExpanded] = useState(false)
-  const closeLabel = t('peek.collapse')
+  const closeLabel = t('peek.close')
 
   useEffect(() => {
     let alive = true
@@ -89,13 +85,9 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
     )
   }
 
+  // Full content, no collapse: the pane's max-height + scroll IS the bound
+  // (the same contract as the diff window).
   const lines = contentLines(state.content)
-  const hidden = lines.length - MAX_LINES
-  const capped = hidden > 0 && !expanded
-  const headLines = Math.ceil(MAX_LINES / 2)
-  const tailLines = MAX_LINES - headLines
-  const head = capped ? lines.slice(0, headLines) : lines
-  const tail = capped ? lines.slice(lines.length - tailLines) : []
 
   return (
     <div className={css.peek} data-diff-stat-peek="">
@@ -105,22 +97,9 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
         <button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button>
       </div>
       <div className={css.body}>
-        {head.map((line, index) => (
-          <div key={'h' + String(index)} className={css.line}>{line}</div>
+        {lines.map((line, index) => (
+          <div key={String(index)} className={css.line}>{line}</div>
         ))}
-        {capped && (
-          <button type="button" className={css.expand} aria-expanded={false} onClick={() => { setExpanded(true) }}>
-            {t('peek.more', { count: hidden })}
-          </button>
-        )}
-        {tail.map((line, index) => (
-          <div key={'t' + String(index)} className={css.line}>{line}</div>
-        ))}
-        {expanded && hidden > 0 && (
-          <button type="button" className={css.expand} aria-expanded onClick={() => { setExpanded(false) }}>
-            {t('peek.collapse')}
-          </button>
-        )}
       </div>
     </div>
   )
