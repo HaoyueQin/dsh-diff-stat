@@ -14,12 +14,22 @@
  * collapsible per-turn summary card.
  */
 import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { MutationRow } from './mutation-row.tsx'
 import { selectChangedFiles, turnChangesDefinition } from './turn-changes.ts'
 import { TurnCard } from './turn-card.tsx'
+import { en, NS, zh, type DiffStatKey } from './locales.ts'
 
-/** Required services: the slot registry, the event assembler, and the session directory (cwd for path copy). */
-export const inject = ['slots', 'conversationEvents', 'sessions']
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** Turn summary card + inline peek copy. */
+    'diff-stat': DiffStatKey
+  }
+}
+
+/** Required services: the slot registry, the event assembler, the session directory (cwd for path copy), and locale. */
+export const inject = ['slots', 'conversationEvents', 'sessions', 'locale']
 
 /** The tool keys this plugin takes over (the wire tools that emit diff cards). */
 const MUTATION_TOOLS = ['edit', 'write'] as const
@@ -30,6 +40,8 @@ const MUTATION_TOOLS = ['edit', 'write'] as const
  */
 export function apply(ctx: ClientContext & { sessions: ISessions }): void {
   const sessions = ctx.sessions
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-diff-stat: dictionaries')
+  const t = ctx.locale.bind(NS)
   ctx.slots.inject('tool.call.toolview', function* () {
     for (const key of MUTATION_TOOLS) {
       yield ctx.slots.register({
@@ -48,6 +60,7 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
       getCwd: (sessionId: string | undefined) => (
         sessionId === undefined ? undefined : sessions.list.getSnapshot().byId[sessionId]?.cwd
       ),
+      t: t as PropsLocale<typeof NS>['t'],
     }),
   }, TurnCard))
 }

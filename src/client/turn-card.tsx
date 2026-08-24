@@ -13,8 +13,10 @@ import {
   IconCopyOutline16, IconFolderClose16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
+import { NS, type DiffStatKey } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
 import css from './turn-card.module.css'
@@ -32,7 +34,7 @@ export type TurnCardProps = {
   sessionId?: string | undefined
   /** Read the session workspace root, for relative-path copy. Absent → copy falls back to the absolute path. */
   getCwd?: ((sessionId: string | undefined) => string | undefined) | undefined
-} & Pick<TurnTailOwnerProps, 'openFile'>
+} & Pick<TurnTailOwnerProps, 'openFile'> & PropsLocale<typeof NS>
 
 /** Totals across files, for the collapsed bar. */
 function totals(files: readonly ChangedFile[]): { added: number; removed: number } {
@@ -50,7 +52,7 @@ function totals(files: readonly ChangedFile[]): { added: number; removed: number
  * The turn-tail summary card.
  * @param props - matched files from the slot select, plus the opener and cwd reader.
  */
-export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps) {
+export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
@@ -113,16 +115,16 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
   }, [getCwd, sessionId])
 
   const menuItems = useMemo(() => [
-    { id: 'peek', label: '内嵌查看' },
-    { id: 'open', label: '系统打开' },
+    { id: 'peek', label: t('card.peek') },
+    { id: 'open', label: t('card.openSystem') },
     ...(hostReady ? [
-      { id: 'explorer', label: '资源管理器中显示' },
-      { id: 'vscode', label: '在 VS Code 中打开' },
+      { id: 'explorer', label: t('card.showInExplorer') },
+      { id: 'vscode', label: t('card.openInVscode') },
     ] : []),
     { type: 'separator' as const, id: 'sep-copy' },
-    { id: 'copy-abs', label: '复制绝对路径', icon: <IconCopyOutline16 size={13} /> },
-    { id: 'copy-rel', label: '复制相对路径', icon: <IconCopyOutline16 size={13} /> },
-  ], [hostReady])
+    { id: 'copy-abs', label: t('card.copyAbs'), icon: <IconCopyOutline16 size={13} /> },
+    { id: 'copy-rel', label: t('card.copyRel'), icon: <IconCopyOutline16 size={13} /> },
+  ], [hostReady, t])
 
   const onMenuSelect = useCallback((id: string, path: string) => {
     if (id === 'peek') togglePeeked(path)
@@ -146,7 +148,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
         <span className={css.chevron + (expanded ? ' ' + css.chevronOpen : '')} aria-hidden>
           <IconChevronRightOutline14 size={12} />
         </span>
-        <span className={css.summary}>{matched.length} 个文件已更改</span>
+        <span className={css.summary}>{t('card.filesChanged', { count: matched.length })}</span>
         <span className={css.badge} data-diffstat="">
           <span className={css.add}>+{total.added}</span>
           <span className={css.del}>−{total.removed}</span>
@@ -156,10 +158,10 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
             type="button"
             className={css.undo + (undoState === 'done' ? ' ' + css.undoDone : '')}
             disabled={undoState === 'busy' || undoState === 'done'}
-            title={undoState === 'error' ? '撤销失败：文件可能已在此轮之外被改动' : '把这一轮改动的文件恢复到轮前状态'}
+            title={undoState === 'error' ? t('card.undoFailedTitle') : t('card.undoTitle')}
             onClick={undoTurn}
           >
-            {undoState === 'busy' ? '撤销中…' : undoState === 'done' ? '已撤销' : undoState === 'error' ? '撤销失败' : '撤销'}
+            {undoState === 'busy' ? t('card.undoing') : undoState === 'done' ? t('card.undone') : undoState === 'error' ? t('card.undoFailed') : t('card.undo')}
           </button>
         )}
       </button>
@@ -193,7 +195,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
                       className={css.action + (revealedFile ? ' ' + css.actionActive : '')}
                       onClick={() => { toggleRevealed(file.path) }}
                     >
-                      审查
+                      {t('card.review')}
                     </button>
                     <Menu
                       open={openFilePath === file.path}
@@ -203,7 +205,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
                           className={css.action}
                           onClick={() => { setOpenFilePath(current => (current === file.path ? null : file.path)) }}
                         >
-                          打开 <IconChevronDownOutline14 size={11} />
+                          {t('card.open')} <IconChevronDownOutline14 size={11} />
                         </button>
                       )}
                       items={menuItems}
@@ -215,7 +217,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
                     <button
                       type="button"
                       className={css.action + (revealedFile ? ' ' + css.actionActive : '')}
-                      aria-label={revealedFile ? '收起差异' : ('展开 ' + name + ' 的差异')}
+                      aria-label={revealedFile ? t('row.collapseDiff') : t('row.expandDiff', { name })}
                       onClick={() => { toggleRevealed(file.path) }}
                     >
                       {revealedFile ? '∧' : '∨'}
@@ -227,7 +229,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd }: TurnCardProps
                     <DiffBlock diffs={[...file.diffs]} maxLines={16} />
                   </div>
                 )}
-                {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} />}
+                {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} />}
               </div>
             )
           })}

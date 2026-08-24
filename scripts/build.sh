@@ -57,6 +57,7 @@ link_pkg @deepseek-ai/dsh-client-ui-slots packages/client/ui-slots
 link_pkg @deepseek-ai/dsh-client-ui-primitives packages/client/ui-primitives
 link_pkg @deepseek-ai/dsh-client-ui-conversation packages/client/ui-conversation
 link_pkg @deepseek-ai/dsh-atomic-write packages/util/atomic-write
+link_pkg @deepseek-ai/dsh-client-locale packages/client/locale
 link_pkg @deepseek-ai/dsh-client-ui-tool packages/client/ui-tool
 # 在 CHECKOUT 内做相对 find：无论 CHECKOUT 是 C:\ 还是 /c/ 风格都成立
 CLSX_REL=$(cd "$CHECKOUT" && find node_modules/.pnpm -maxdepth 1 -type d -iname 'clsx@*' 2>/dev/null | head -1)

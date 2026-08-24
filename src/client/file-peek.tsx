@@ -6,8 +6,10 @@
  * files degrade to explicit notes.
  */
 import { useEffect, useState } from 'react'
-import css from './file-peek.module.css'
+import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { hostCall } from './api.ts'
+import { NS } from './locales.ts'
+import css from './file-peek.module.css'
 
 /** Same collapse geometry as the stock DiffBlock chat cap. */
 const MAX_LINES = 16
@@ -20,10 +22,10 @@ function contentLines(text: string): readonly string[] {
 }
 
 /** Full props of the bounded file view. */
-export interface FilePeekProps {
+export type FilePeekProps = {
   path: string
   cwd: string | undefined
-}
+} & PropsLocale<typeof NS>
 
 type PeekState =
   | { readonly kind: 'loading' }
@@ -35,7 +37,7 @@ type PeekState =
  * Fetch and render one file inside the bounded window.
  * @param props - the absolute path plus the session workspace root for the fence.
  */
-export function FilePeek({ path, cwd }: FilePeekProps) {
+export function FilePeek({ path, cwd, t }: FilePeekProps) {
   const [state, setState] = useState<PeekState>({ kind: 'loading' })
   const [expanded, setExpanded] = useState(false)
 
@@ -59,13 +61,13 @@ export function FilePeek({ path, cwd }: FilePeekProps) {
   }, [path, cwd])
 
   if (state.kind === 'loading') {
-    return <div className={css.peek}><div className={css.note}>读取中…</div></div>
+    return <div className={css.peek}><div className={css.note}>{t('peek.loading')}</div></div>
   }
   if (state.kind === 'error') {
-    return <div className={css.peek}><div className={css.note}>无法读取：{state.message}</div></div>
+    return <div className={css.peek}><div className={css.note}>{t('peek.readFailed')}：{state.message}</div></div>
   }
   if (state.kind === 'binary') {
-    return <div className={css.peek}><div className={css.note}>二进制文件（{state.size} 字节），无法预览</div></div>
+    return <div className={css.peek}><div className={css.note}>{t('peek.binary', { size: state.size })}</div></div>
   }
 
   const lines = contentLines(state.content)
@@ -80,7 +82,7 @@ export function FilePeek({ path, cwd }: FilePeekProps) {
     <div className={css.peek} data-diff-stat-peek="">
       <div className={css.bar}>
         <span>{path}</span>
-        <span>{state.size} 字节{state.truncated ? ' · 已截断（前 512 KiB）' : ''}</span>
+        <span>{t('peek.bytes', { size: state.size })}{state.truncated ? ' · ' + t('peek.truncated') : ''}</span>
       </div>
       <div className={css.body}>
         {head.map((line, index) => (
@@ -88,7 +90,7 @@ export function FilePeek({ path, cwd }: FilePeekProps) {
         ))}
         {capped && (
           <button type="button" className={css.expand} aria-expanded={false} onClick={() => { setExpanded(true) }}>
-            … 其余 {hidden} 行
+            {t('peek.more', { count: hidden })}
           </button>
         )}
         {tail.map((line, index) => (
@@ -96,7 +98,7 @@ export function FilePeek({ path, cwd }: FilePeekProps) {
         ))}
         {expanded && hidden > 0 && (
           <button type="button" className={css.expand} aria-expanded onClick={() => { setExpanded(false) }}>
-            收起
+            {t('peek.collapse')}
           </button>
         )}
       </div>
