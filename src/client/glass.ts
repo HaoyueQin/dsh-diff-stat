@@ -73,3 +73,27 @@ export function whenGlassReady(timeoutMs = 10_000): Promise<BackgroundGlassApi |
     window.addEventListener(GLASS_EVENT, onReady)
   })
 }
+
+/**
+ * Subscribe to every glass-bridge publication, including hot reloads.
+ *
+ * Unlike {@link whenGlassReady} (which settles once), this keeps the ready
+ * listener attached for the whole fiber: if the background plugin hot-reloads
+ * and re-publishes the bridge, the caller can re-register its surfaces against
+ * the new api. Returns the unsubscriber for effect cleanup.
+ *
+ * @param listener - invoked immediately if the bridge is already published,
+ *   then again after every `dsh-background-glass:ready` event.
+ * @returns the unsubscriber (idempotent).
+ */
+export function subscribeGlassReady(listener: (glass: BackgroundGlassApi) => void): () => void {
+  const existing = (window as unknown as Record<string, unknown>)[GLASS_GLOBAL] as BackgroundGlassApi | undefined
+  if (existing !== undefined) listener(existing)
+  const onReady = (event: Event): void => {
+    listener((event as CustomEvent<BackgroundGlassApi>).detail)
+  }
+  window.addEventListener(GLASS_EVENT, onReady)
+  return () => {
+    window.removeEventListener(GLASS_EVENT, onReady)
+  }
+}

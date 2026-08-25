@@ -16,7 +16,7 @@
 import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { whenGlassReady } from './glass.ts'
+import { subscribeGlassReady } from './glass.ts'
 import { MutationRow } from './mutation-row.tsx'
 import { selectChangedFiles, turnChangesDefinition } from './turn-changes.ts'
 import { TurnCard } from './turn-card.tsx'
@@ -56,14 +56,19 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
   // Optional frosted-glass integration: when deepseek-harness-background is
   // installed, its diff window and file preview join the unified glass recipe
   // (token mode — both paint with --dsw-alias-markdown-code-block, whose fill
-  // already follows the panel-opacity slider). When the bridge is absent the
-  // timeout resolves null and the ordinary UI stays exactly as-is.
+  // already follows the panel-opacity slider). The subscription covers both
+  // arrival orders AND hot reload: a ready event after a new bridge publication
+  // re-registers against the live api. When the bridge never appears the
+  // ordinary UI stays exactly as-is.
   ctx.effect(() => {
     let unregister: (() => void) | undefined
-    let disposed = false
-    void whenGlassReady().then((glass) => {
-      if (disposed || glass === null || glass.version !== 1) return
+    const unsubscribe = subscribeGlassReady((glass) => {
+      if (glass.version !== 1) return
       if (glass.bridgeId !== 'deepseek-harness-background') return
+      // Re-register on every publication: the previous handle belongs to the
+      // superseded bridge (its registry is already gone) and calling it is a
+      // safe no-op, while the new registration lands on the live registry.
+      unregister?.()
       unregister = glass.register({
         plugin: 'dsh-diff-stat',
         selectors: ['[data-diff-window]', '[data-diff-stat-peek]'],
@@ -71,8 +76,8 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
       })
     })
     return () => {
-      disposed = true
       unregister?.()
+      unsubscribe()
     }
   }, 'dsh-diff-stat: frosted-glass surfaces')
 
