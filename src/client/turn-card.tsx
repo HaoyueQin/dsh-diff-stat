@@ -1,7 +1,7 @@
 /**
  * The per-turn file-change summary card (R2): a collapsible bar at each
  * completed turn's tail — "N 个文件已更改 +X −Y" — expanding to per-file rows
- * (name · directory · +n −m · 审查 · 打开 ▾ · ∨) with inline unified diffs.
+ * (name · directory · +n −m · 审查 · 打开|▾) with inline unified diffs.
  * Files and hunks come from the turn accumulator (turn-changes.ts), never the
  * closing prose. 系统打开 rides the stock openFile opener; the remaining
  * actions (撤销 / 内嵌查看 / 定向打开) arrive with the M4 host half and stay
@@ -21,27 +21,8 @@ import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
 import { DiffWindow } from './diff-window.tsx'
 import { ExternalLinkIcon, EyeIcon, VSCodeIcon } from './icons.tsx'
+import { FileTypeIcon } from './file-type-icon.tsx'
 import css from './turn-card.module.css'
-
-/** GitHub-language-bar-style accent per extension; unknown extensions fall back to the muted label color. */
-const EXT_COLORS: Record<string, string> = {
-  ts: '#3178c6', tsx: '#3178c6',
-  js: '#f1e05a', jsx: '#f1e05a', mjs: '#f1e05a', cjs: '#f1e05a',
-  rs: '#dea584', py: '#3572a5', md: '#519aba', json: '#cbcb41',
-  css: '#663399', html: '#e34c26', yml: '#cb171e', yaml: '#cb171e',
-}
-
-/** Small file silhouette tinted by the path's extension. */
-function FileIcon({ path }: { path: string }) {
-  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase()
-  const color = EXT_COLORS[ext] ?? 'var(--dsw-alias-label-tertiary)'
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M4 1.5h5.2L12.5 4.8v9.7a1 1 0 0 1-1 1h-7.5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" fill={color} />
-      <path d="M9.2 1.5v3.3h3.3" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1" />
-    </svg>
-  )
-}
 
 /** Directory part of a path, for the muted directory segment of a file row. */
 function dirname(path: string): string {
@@ -181,7 +162,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
             className={css.undo + (undoState === 'done' ? ' ' + css.undoDone : '')}
             disabled={undoState === 'busy' || undoState === 'done'}
             title={undoState === 'error' ? t('card.undoFailedTitle') : t('card.undoTitle')}
-            onClick={undoTurn}
+            onClick={event => { event.stopPropagation(); undoTurn() }}
           >
             {undoState === 'busy' ? t('card.undoing') : undoState === 'done' ? t('card.undone') : undoState === 'error' ? t('card.undoFailed') : '↶ ' + t('card.undo')}
           </button>
@@ -197,7 +178,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
             return (
               <div key={file.path} data-diff-stat-file={file.path}>
                 <div className={css.fileRow}>
-                  <span className={css.fileIcon} aria-hidden><FileIcon path={file.path} /></span>
+                  <span className={css.fileIcon} aria-hidden><FileTypeIcon path={file.path} /></span>
                   <button
                     type="button"
                     className={css.fileName}
@@ -214,34 +195,48 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
                   <span className={css.actions}>
                     <button
                       type="button"
-                      className={css.action + (revealedFile ? ' ' + css.actionActive : '')}
+                      className={css.action + ' ' + css.chip + (revealedFile ? ' ' + css.actionActive : '')}
                       onClick={() => { toggleRevealed(file.path) }}
                     >
                       {t('card.review')}
                     </button>
-                    <Menu
-                      open={openFilePath === file.path}
-                      anchor={(
-                        <button
-                          type="button"
-                          className={css.action}
-                          onClick={() => { setOpenFilePath(current => (current === file.path ? null : file.path)) }}
-                        >
-                          {t('card.open')} <IconChevronDownOutline14 size={11} />
-                        </button>
-                      )}
-                      items={menuItems}
-                      onSelect={id => { onMenuSelect(id, file.path); setOpenFilePath(null) }}
-                      onClose={() => { setOpenFilePath(null) }}
-                      align="end"
-                      compact
-                      portal
-                    />
+                    <span className={css.openSplit}>
+                      <button
+                        type="button"
+                        className={css.action + ' ' + css.openMain + (peeked.has(file.path) ? ' ' + css.actionActive : '')}
+                        title={t('card.peek')}
+                        onClick={() => { togglePeeked(file.path) }}
+                      >
+                        {t('card.open')}
+                      </button>
+                      <span className={css.openDivider} aria-hidden />
+                      <Menu
+                        open={openFilePath === file.path}
+                        anchor={(
+                          <button
+                            type="button"
+                            className={css.action + ' ' + css.openMore + (openFilePath === file.path ? ' ' + css.actionActive : '')}
+                            aria-label={t('card.openMore')}
+                            aria-haspopup="menu"
+                            aria-expanded={openFilePath === file.path}
+                            onClick={() => { setOpenFilePath(current => (current === file.path ? null : file.path)) }}
+                          >
+                            <IconChevronDownOutline14 size={11} />
+                          </button>
+                        )}
+                        items={menuItems}
+                        onSelect={id => { onMenuSelect(id, file.path); setOpenFilePath(null) }}
+                        onClose={() => { setOpenFilePath(null) }}
+                        align="end"
+                        compact
+                        portal
+                      />
+                    </span>
                   </span>
                 </div>
                 {revealedFile && (
                   <div className={css.diffWrap}>
-                    <DiffWindow diffs={[...file.diffs]} maxHeight={320} />
+                    <DiffWindow diffs={file.diffs} maxHeight={320} />
                   </div>
                 )}
                 {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} onClose={() => { togglePeeked(file.path) }} />}

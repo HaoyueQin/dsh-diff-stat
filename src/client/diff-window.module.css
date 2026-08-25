@@ -26,6 +26,10 @@
 	font-weight: 600;
 }
 
+.ctx {
+	color: var(--dsw-alias-label-secondary);
+}
+
 .gap {
 	color: var(--dsw-alias-label-tertiary);
 }

@@ -31,6 +31,7 @@
   "scripts": {
     "build": "bash scripts/build.sh",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
+    "check:align": "node scripts/check-diff-align.mjs",
     "build:client": "tsdown"
   },
   "exports": {
