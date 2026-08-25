@@ -127,6 +127,17 @@ export function changesForClosing(
   return files
 }
 
+/** Stable empty match: claiming runs render null instead of remounting loops. */
+export const EMPTY_CHANGED_FILES: readonly ChangedFile[] = []
+
+/**
+ * Per-published-data memo of the claimed match. The chain select re-runs on
+ * every render, and the slot compares results by identity — returning a fresh
+ * array each time would re-render the card forever (each render re-runs the
+ * select). The published data object is immutable, so it is a safe cache key.
+ */
+const selectMemo = new WeakMap<object, Map<number, readonly ChangedFile[] | null>>()
+
 /**
  * Claim the turn-tail chain only when its closing turn changed files.
  * @param owner - Turn-tail owner currency for the closing assistant.
@@ -134,13 +145,24 @@ export function changesForClosing(
  */
 export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedFile[] | null {
   const data = owner.turn.data.get('diff-stat')
+  if (data === undefined) return null
+  let bySeq = selectMemo.get(data)
+  if (bySeq === undefined) {
+    bySeq = new Map()
+    selectMemo.set(data, bySeq)
+  }
+  const cached = bySeq.get(owner.seq)
+  if (cached !== undefined) return cached
   const files = changesForClosing(data, owner.seq)
-  if (files.length > 0) return files
-  // A run_code turn may still have changed files: its edit/write dispatch
-  // sub-calls carry no turn coordinate, so they never enter the accumulator.
-  // Claiming with an empty match mounts the card, which joins them from the
-  // stock chat tool tree; a turn with nothing to show renders null.
-  return data?.hasCodeDispatch === true ? [] : null
+  const result = files.length > 0
+    ? files
+    // A run_code turn may still have changed files: its edit/write dispatch
+    // sub-calls carry no turn coordinate, so they never enter the accumulator.
+    // Claiming with an empty match mounts the card, which joins them from the
+    // stock chat tool tree; a turn with nothing to show renders null.
+    : data.hasCodeDispatch ? EMPTY_CHANGED_FILES : null
+  bySeq.set(owner.seq, result)
+  return result
 }
 
 /** Turn-local successful mutation accumulator; it publishes no view Node. */

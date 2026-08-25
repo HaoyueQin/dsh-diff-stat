@@ -9,7 +9,7 @@
  * openFile opener; the remaining actions (撤销 / 内嵌查看 / 定向打开) arrive
  * with the M4 host half and stay hidden while it is absent.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14,
   IconCopyOutline16, IconFolderOpen16, Menu, writeClipboard,
@@ -83,9 +83,13 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
 
   // The PTC half: join this Turn's edit/write dispatch sub-calls from the
   // stock chat tool tree (the accumulator cannot route them — dispatch
-  // records carry no turn coordinate). Pure snapshot read; empty while idle.
-  const dispatchFiles = useSession?.(snapshot => {
-    if (turn === undefined) return EMPTY_FILES
+  // records carry no turn coordinate). The selector returns the snapshot
+  // itself — the only identity-stable choice under uSES's Object.is equality
+  // (a fresh array per call would re-render this card forever) — and the
+  // extraction runs in a memo over that stable reference.
+  const snapshot = useSession?.(s => s)
+  const dispatchFiles = useMemo(() => {
+    if (snapshot === undefined || turn === undefined) return EMPTY_FILES
     const files: ChangedFile[] = []
     for (const key of snapshot.chat.locations.getTurn(turn.turn)) {
       const node = snapshot.chat.nodes.get(key)
@@ -94,20 +98,24 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
       if (root !== undefined) collectDispatchFiles(root as ToolCallBlock, files)
     }
     return files
-  }) ?? EMPTY_FILES
+  }, [snapshot, turn])
   const allFiles = useMemo(() => mergeChangedFiles(matched, dispatchFiles), [matched, dispatchFiles])
   const total = useMemo(() => totals(allFiles), [allFiles])
   const cwd = useMemo(() => getCwd?.(sessionId), [getCwd, sessionId])
 
   // Boost newly reviewed files whose hunks are bare arg fragments; the host
   // read is LRU-cached and best-effort, and unlocatable fragments (since
-  // re-edited, truncated reads) simply keep their bare rendering.
+  // re-edited, truncated reads) simply keep their bare rendering. The list is
+  // read through a ref so the effect keys on the user interaction (revealed)
+  // only — allFiles churns on every parent render and must not re-trigger.
+  const allFilesRef = useRef(allFiles)
+  allFilesRef.current = allFiles
   useEffect(() => {
     if (revealed.size === 0) return
     let alive = true
     void (async () => {
       for (const path of revealed) {
-        const file = allFiles.find(candidate => candidate.path === path)
+        const file = allFilesRef.current.find(candidate => candidate.path === path)
         if (file === undefined || !file.diffs.some(isArgHunk)) continue
         const next = await boostEditHunks(file.diffs, path, cwd)
         if (!alive) return
@@ -119,7 +127,7 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
       }
     })()
     return () => { alive = false }
-  }, [revealed, allFiles, cwd])
+  }, [revealed, cwd])
 
   // Host half probe: the dependent actions (撤销/内嵌查看/定向打开) stay
   // hidden while the server route is absent.
