@@ -161,19 +161,26 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
         // Fence the path like every other endpoint: the opener must not
         // become a probe for paths outside the session workspace.
         const resolved = await resolveFile(cwd, requestedPath)
+        // Both openers run a quoted command line through the shell, and cmd
+        // expands %VAR% inside quotes — a name like report%TEMP%.md would
+        // silently open something else. NTFS forbids quotes in names anyway;
+        // reject both characters up front on the value that reaches the line.
+        if (/["%]/.test(resolved.filename)) {
+          rejectPromise(new Error('path contains a shell-special character (quote or %)'))
+          return
+        }
         if (target === 'explorer') {
-          // explorer /select,"<path>" reveals the file in its folder.
-          const child = spawn('explorer', ['/select,"' + resolved.filename + '"'], { detached: true, stdio: 'ignore' })
+          // explorer /select,"<path>" reveals the file in its folder. The
+          // quoting CANNOT survive spawn's array form: Node re-escapes the
+          // embedded quotes and explorer, seeing a mangled argument, falls
+          // back to its default view. Pass the literal line through the shell.
+          const child = spawn('explorer /select,"' + resolved.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
           child.unref()
           child.once('error', rejectPromise)
           // explorer returns a nonzero/late exit by design; the spawn
           // succeeding is the signal.
           setTimeout(() => resolvePromise(), 300)
         } else if (target === 'vscode') {
-          if (requestedPath.includes('"')) {
-            rejectPromise(new Error('path contains a quote'))
-            return
-          }
           // code is a .cmd shim on Windows; shell: true resolves it.
           const child = spawn('code "' + resolved.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
           child.unref()
@@ -216,6 +223,24 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   })
 }
 
+/**
+ * Slice a byte buffer at a complete UTF-8 sequence boundary: a raw cap cut
+ * can land mid-sequence, and the truncated tail would decode to U+FFFD. Walk
+ * back over at most three continuation bytes to the sequence's lead byte and
+ * drop the tail only when that lead byte declares more bytes than remain.
+ */
+function utf8SafeSlice(bytes: Buffer): Buffer {
+  for (let back = 1; back <= 3 && back <= bytes.length; back += 1) {
+    const byte = bytes[bytes.length - back]
+    if (byte === undefined) break
+    if ((byte & 0b1100_0000) === 0b1000_0000) continue
+    const need = byte >= 0b1111_0000 ? 4 : byte >= 0b1110_0000 ? 3 : byte >= 0b1100_0000 ? 2 : 1
+    if (need > back) return bytes.subarray(0, bytes.length - back)
+    break
+  }
+  return bytes
+}
+
 /** Send one JSON response and end the request. */
 function respond(res: ServerResponse, status: number, payload: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' })
@@ -252,7 +277,9 @@ export function apply(ctx: Context): void {
             return
           }
           const truncated = resolved.bytes.length > READ_CAP
-          const content = truncated ? resolved.bytes.subarray(0, READ_CAP).toString('utf8') : resolved.text
+          const content = truncated
+            ? utf8SafeSlice(resolved.bytes.subarray(0, READ_CAP)).toString('utf8')
+            : resolved.text
           respond(res, 200, { kind: 'text', content, truncated, size: resolved.bytes.length })
           return
         }
