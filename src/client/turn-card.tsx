@@ -18,7 +18,7 @@ import type { ToolChatData, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-u
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  ToolCallBlock, TurnLocation, UseConversationSession,
+  ConversationSnapshot, ToolCallBlock, TurnLocation, UseConversationSession,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { diffStats, isArgHunk } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
@@ -78,25 +78,50 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
   const [hostReady, setHostReady] = useState(false)
   const [undoState, setUndoState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
   // Arg-derived hunks (PTC fragments) gain file context when their file is
-  // expanded for review; applied wire hunks already carry the host's ±3.
-  const [boosted, setBoosted] = useState<ReadonlyMap<string, readonly DiffHunk[]>>(() => new Map())
+  // expanded for review; applied wire hunks already carry the host's ±3. Each
+  // entry pins the hunk list it was built from, so stale entries self-invalidate.
+  const [boosted, setBoosted] = useState<ReadonlyMap<string, { diffs: readonly DiffHunk[]; result: readonly DiffHunk[] }>>(() => new Map())
 
   // The PTC half: join this Turn's edit/write dispatch sub-calls from the
   // stock chat tool tree (the accumulator cannot route them — dispatch
   // records carry no turn coordinate). The selector returns the snapshot
   // itself — the only identity-stable choice under uSES's Object.is equality
   // (a fresh array per call would re-render this card forever) — and the
-  // extraction runs in a memo over that stable reference.
+  // extraction memoizes twice: per snapshot/turn from useMemo, and across
+  // snapshots through a node-identity fingerprint, so later turns streaming
+  // in the same session cannot re-parse this tree on every chunk.
   const snapshot = useSession?.(s => s)
+  const joinCache = useRef<{
+    snapshot: ConversationSnapshot | undefined
+    turn: TurnLocation | undefined
+    keys: readonly string[]
+    nodes: readonly unknown[]
+    result: readonly ChangedFile[]
+  } | null>(null)
   const dispatchFiles = useMemo(() => {
     if (snapshot === undefined || turn === undefined) return EMPTY_FILES
+    const cache = joinCache.current
+    const keys = snapshot.chat.locations.getTurn(turn.turn)
+    if (cache !== null && cache.snapshot === snapshot && cache.turn === turn && cache.keys.length === keys.length) {
+      let same = true
+      for (let i = 0; i < keys.length; i++) {
+        if (cache.keys[i] !== keys[i] || cache.nodes[i] !== snapshot.chat.nodes.get(keys[i])) {
+          same = false
+          break
+        }
+      }
+      if (same) return cache.result
+    }
+    const nodes: unknown[] = []
     const files: ChangedFile[] = []
-    for (const key of snapshot.chat.locations.getTurn(turn.turn)) {
+    for (const key of keys) {
       const node = snapshot.chat.nodes.get(key)
+      nodes.push(node)
       if (node === undefined || node.kind !== 'tool-call') continue
       const root = (node.data as ToolChatData | undefined)?.root
       if (root !== undefined) collectDispatchFiles(root as ToolCallBlock, files)
     }
+    joinCache.current = { snapshot, turn, keys, nodes, result: files }
     return files
   }, [snapshot, turn])
   const allFiles = useMemo(() => mergeChangedFiles(matched, dispatchFiles), [matched, dispatchFiles])
@@ -108,8 +133,13 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
   // re-edited, truncated reads) simply keep their bare rendering. The list is
   // read through a ref so the effect keys on the user interaction (revealed)
   // only — allFiles churns on every parent render and must not re-trigger.
+  // Each entry records the exact hunk list it was built from: a re-render with
+  // fresh hunks for the same path invalidates the entry by identity, and the
+  // ref check keeps already-boosted files from re-running on every toggle.
   const allFilesRef = useRef(allFiles)
   allFilesRef.current = allFiles
+  const boostedRef = useRef(boosted)
+  boostedRef.current = boosted
   useEffect(() => {
     if (revealed.size === 0) return
     let alive = true
@@ -117,11 +147,12 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
       for (const path of revealed) {
         const file = allFilesRef.current.find(candidate => candidate.path === path)
         if (file === undefined || !file.diffs.some(isArgHunk)) continue
+        if (boostedRef.current.get(path)?.diffs === file.diffs) continue
         const next = await boostEditHunks(file.diffs, path, cwd)
         if (!alive) return
         setBoosted(prev => {
           const map = new Map(prev)
-          map.set(path, next)
+          map.set(path, { diffs: file.diffs, result: next })
           return map
         })
       }
@@ -299,7 +330,7 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
                 </div>
                 {revealedFile && (
                   <div className={css.diffWrap}>
-                    <DiffWindow diffs={boosted.get(file.path) ?? file.diffs} maxHeight={320} />
+                    <DiffWindow diffs={boosted.get(file.path)?.diffs === file.diffs ? boosted.get(file.path)!.result : file.diffs} maxHeight={320} />
                   </div>
                 )}
                 {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} onClose={() => { togglePeeked(file.path) }} />}

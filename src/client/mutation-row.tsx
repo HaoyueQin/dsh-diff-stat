@@ -139,9 +139,13 @@ export function MutationRow({ toolName, block, cwd, openFile, inspect }: Mutatio
   const model = useMemo(() => rowModel(toolName, block, cwd), [toolName, block, cwd])
   const diff = useMemo(() => diffCardModel(block), [block])
   const diffBody = diff ?? null
-  const stats = diffBody !== null && model.state !== 'error' && model.state !== 'stopped'
-    ? diffStats(diffBody.card.diffs)
-    : null
+  // diffStats runs the LCS DP now — keep it off the per-render path.
+  const stats = useMemo(
+    () => diffBody !== null && model.state !== 'error' && model.state !== 'stopped'
+      ? diffStats(diffBody.card.diffs)
+      : null,
+    [diffBody, model.state],
+  )
   const outputText = model.output
   const expandable = model.body !== null || outputText !== null || diffBody !== null
   const open = expanded && expandable
