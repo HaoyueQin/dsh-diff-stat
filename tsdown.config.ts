@@ -39,7 +39,7 @@ const clientBundle: UserConfig = {
   platform: 'browser',
   dts: false,
   clean: false,
-  sourcemap: true,
+  sourcemap: false,
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
   },
@@ -105,6 +105,11 @@ const clientBundle: UserConfig = {
   }],
   outputOptions: {
     entryFileNames: 'client.js',
+    // Strip bundler comments: the `//#region <module path>` labels embed the
+    // checkout-relative dependency path, which differs between machines and
+    // would make the committed lib/ non-reproducible. Comments carry no
+    // runtime value here, so strip them all for a byte-stable artifact.
+    comments: false,
     banner: 'window.__ModuleLoader__.load({ id: ' + JSON.stringify(PLUGIN_ID) + ', factory: (require) => {',
     footer: 'return module.exports; } });',
     intro: 'var module = { exports: {} }; var exports = module.exports;',
