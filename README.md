@@ -15,10 +15,11 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 
 - **Inline +N −M badges**: takes over the stock edit/write rows (keyed lower-priority shadow; uninstall restores stock automatically). Counts show while running from the argument-derived estimate, then switch to the exact result-view hunks on settlement
 - **Full diff on click**: expands a unified diff rendered through the stock `DiffBlock` primitive (16-line capped collapse, copy, `└ +A -R` footer, theme tokens)
-- **Per-turn summary card**: a collapsible "N files changed +X −Y" bar at each turn's tail; expands to per-file rows (name · directory · ±lines · review · open ▾ · ∨). Same-file edits within a turn merge and accumulate
+- **Per-turn summary card**: a collapsible "N files changed +X −Y" bar at each turn's tail; expands to per-file rows (per-type file icon · name · directory · ±lines · review · open | ▾). Same-file edits within a turn merge and accumulate
 - **PTC / Code Dispatch fallback**: nested sub-calls carry no wire diff views; the plugin derives the call-time diff from the tools' own `presentCall` semantics (edit's old→new, write's whole-file create). `rootCallId+subCallId` dedup keeps replays from double-counting
 - **Undo**: reverts the turn's files to their pre-turn state — reverse uniqueness-checked hunk peeling, deletes files the turn created, rejects drifted files before writing, atomic commits
-- **Inline view**: 打开 ▾ → View inline expands a height-capped file content window (16-line collapse, the stock DiffBlock interaction)
+- **Inline view**: clicking "open" expands a height-capped file content window below the row (16-line collapse, the stock DiffBlock interaction); the "▾" menu keeps every open-with route
+- **Context folding**: before rendering, each hunk's sides are LCS-aligned — shared lines become ±3 lines of context around the change and untouched runs fold into ⋯; badge and footer totals stay full-scope
 - **Open with**: system open (the stock `openFile`), reveal in Explorer, open in VS Code, copy absolute/relative path
 - **zh / en**: copy follows the Web UI language (locale service)
 
