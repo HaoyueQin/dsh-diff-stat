@@ -6,36 +6,38 @@
 [![npm](https://img.shields.io/npm/v/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat) [![npm downloads](https://img.shields.io/npm/dt/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat)
 [![dsh](https://img.shields.io/badge/dsh-%E2%89%A50.1.1--rc-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 ![platform](https://img.shields.io/badge/platform-web-8A9CF5?style=flat-square)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-success?style=flat-square)
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 插件：为 `edit`/`write` 工具行提供行内 **+N −M** 徽标，并在每轮结束时给出文件变更汇总卡。点击展开完整 unified diff；Code Dispatch（PTC）嵌套子调用照常工作（参数兜底推导，不依赖 wire diff 视图）。不依赖 git，不依赖任何第三方插件。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 插件，将智能体的文件变更可视化：变更工具行内联 **+N −M** 徽标、轮末文件变更汇总卡、点击展开对齐后的完整 diff。原生 `edit`/`write` 调用、极简预设的 `str_replace_editor`、Code Dispatch（PTC）子调用全链路覆盖。不依赖 git，不依赖任何第三方插件。
 
 ## 功能
 
-- **行内 +N −M 徽标**：接管 stock 的 edit/write 工具行（keyed 低优先阴影，卸载自动还原 stock），收起态即见增删行数——运行中用参数推导预估，结算后以 resultView 精确值替换
-- **展开完整 diff**：点击行展开 unified diff，渲染走 stock `DiffBlock` 原语（16 行限高折叠、复制、`└ +A -R` 页脚、主题令牌）
-- **轮末汇总卡**：每轮消息流尾部折叠条「N 个文件已更改 +X −Y」；展开逐文件行（分类型文件图标 · 文件名 · 目录 · ±行数 · 审查 · 打开|▾），同文件多次编辑合并累计
-- **PTC/Code Dispatch 兜底**：嵌套子调用在 wire 上没有任何 diff 视图，插件按工具自身 `presentCall` 语义从参数推导调用时 diff（edit 的 old→new、write 的整文件新增）；`rootCallId+subCallId` 去重防重放双计
-- **撤销**：一键把本轮改动恢复到轮前状态——hunk 链倒序唯一性回剥、本轮新建文件删除、文件漂移拒绝写入、原子写
-- **内嵌查看**：点「打开」直接在条目下方展开限高文件内容窗口（16 行折叠，与 stock DiffBlock 同款交互）；「▾」菜单保留全部打开方式
-- **上下文折叠**：展开 diff 前 hunk 两侧做行级 LCS 对齐——共同行作变更块 ±3 行上下文，更远未变更区间折叠为 ⋯；徽标与页脚统计保持全量口径
-- **毛玻璃（可选）**：安装 [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) 后，本插件全部表面并入其共享玻璃配方——diff 窗口、文件预览、行内 IN/OUT 卡用 token 模式，轮末汇总卡用 fill 模式；毛玻璃开启时 +/− diff 底色微调增强，保证红绿标注可读；未安装时全部保持现有不透明外观——优雅降级、零依赖
-- **打开系**：系统打开（本体 `openFile`）+ 资源管理器定位 + VS Code 打开 + 复制绝对/相对路径
-- **中英文**：跟随 Web 界面语言（locale 服务）
+- **行内 +N −M 徽标** — 接管 `edit`、`write` 与 `str_replace_editor` 的 stock 变更行（keyed 低优先阴影，卸载自动还原）。计数是真实变更行数——与 diff 渲染共用同一趟 LCS：运行中按参数预估，结算后以 resultView 精确值呈现
+- **对齐 diff 窗口** — 点击行展开限高滚动的 unified 视图。两侧先做行级 LCS 对齐：共同行渲染为变更处 ±3 行上下文，更远的未变更区间折叠为 ⋯；页脚统计与正文渲染完全同源
+- **轮末汇总卡** — 每轮消息流尾部折叠条「N files changed +X −Y」；逐文件行含类型图标、目录、±行数、审查、打开 ▾ 与撤销，同文件多次编辑按结算顺序合并累计
+- **Code Dispatch（PTC）全链路** — dispatch 子调用在 wire 上没有 diff 视图：行内回退到参数推导 diff，轮末卡从 stock 会话工具树 join 出其文件，纯 Code-Mode 轮同样有汇总卡；`subCallId` 去重防止重放双计
+- **文件上下文增强** — 参数推导的裸片段在展开时获得至多 ±3 行真实文件上下文：增强器经 host 围栏 API 读取文件、定位片段的 after 形态并重建 hunk（尽力而为；无法定位的片段保持原样）
+- **撤销** — 一键把本轮文件恢复到轮前状态：hunk 链倒序唯一性回剥、本轮新建文件删除、文件漂移在写入前拒绝、原子提交
+- **内嵌查看与打开系** — 点「打开」在行下方展开限高文件预览；「▾」菜单保留系统打开、资源管理器定位、VS Code 与绝对/相对路径复制
+- **毛玻璃（可选）** — 安装 [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) 后，本插件全部表面并入其共享玻璃配方；未安装时保持 stock 不透明外观——优雅降级、零依赖
+- **中英文** — 文案跟随 Web 界面语言（locale 服务）
 
 ## 截图
 
-| 毛玻璃下的展开 diff | 轮末卡 + 内联文件预览 |
+| 轮末汇总卡 | 接管行与对齐 diff |
 | --- | --- |
-| ![展开 diff](docs/images/glass-diff-edit.png) | ![轮末卡与预览](docs/images/glass-card-peek.png) |
+| ![轮末汇总卡：逐文件行与内嵌预览](docs/images/glass-card-peek.png) | ![接管编辑行：徽标与对齐 diff 窗口](docs/images/glass-diff-edit.png) |
+
+左：轮末汇总卡，含逐文件审查 / 打开 / 撤销操作；右：行内 +N −M 徽标与其对齐 diff 窗口。均处于可选毛玻璃效果之下。
 
 ## 机制
 
-- **行内徽标**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write` 键，priority −1 阴影 shipped 行；diff 数据按「resultView → callView → 参数兜底」三级提取（顺序即合同：窗口截断丢 callView 时仍可从 resultView 渲染）
-- **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start` / `tool/call` / `tool/result(append)` / `tool/code-dispatch`）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染；结构遵循官方 `ui-deliverables` 模式
-- **host 半**（可选）：同源前缀路由提供围栏 API——realpath 包含性（解析前后双查）、符号链接拒绝、UTF-8 回环校验、512 KiB 读取截断、原子写；host 半缺席时相关按钮自动隐藏
-- **毛玻璃桥（可选）**：零依赖消费 background 插件的 `window.__DSH_BACKGROUND_GLASS__` 注册表——`[data-diff-window]`、`[data-diff-stat-peek]`、`[data-diff-stat-io]` 用 token 模式，`[data-diff-stat-card]` 用 fill 模式；常驻订阅 `dsh-background-glass:ready`（覆盖两种到达顺序与热重载），桥不存在时普通界面原样保留
+- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行；diff 数据按权威链 resultView → callView → 参数兜底提取，窗口截断丢掉 callView 时仍可从 resultView 渲染
+- **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start`、`tool/call`、`tool/result(append)`、`tool/code-dispatch`）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染——结构遵循官方 `ui-deliverables` 模式。Code-Dispatch 文件从 stock 会话工具树 join：其 `tool-call` 节点已把每个 dispatch 按 rootCallId 折叠进根调用的 `subCalls`
+- **上下文增强**：参数来源的 hunk 在构造时按对象身份标记；展开时增强器经围栏 API 读取文件（LRU 缓存）、定位片段的 after 形态并以共享行重建 hunk，无法定位的原样渲染
+- **host 半**（可选）：同源前缀路由提供围栏 API——realpath 包含性解析前后双查、符号链接拒绝、UTF-8 回环校验、512 KiB 读取上限、原子写；host 半缺席时相关操作自动隐藏
+- **毛玻璃桥**（可选）：零依赖消费 background 插件的 `window.__DSH_BACKGROUND_GLASS__` 注册表——常驻订阅其 ready 事件（覆盖两种到达顺序与热重载）；桥不存在时普通界面原样保留
 
 ## 安装
 
@@ -62,7 +64,7 @@ dsh plugin --profile web remove dsh-diff-stat
 pnpm install        # devDependencies；prepare 会自动构建 lib/
 pnpm build          # host 半 → lib/index.js + 浏览器半 → lib/client.js（一次 tsdown）
 pnpm typecheck      # 双端 tsc
-pnpm check:align    # 对齐引擎断言（需 Node >= 23.6）
+pnpm check:align    # 对齐引擎与数据模型断言（需 Node >= 23.6）
 ```
 
 ## License
