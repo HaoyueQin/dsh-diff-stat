@@ -37,6 +37,9 @@
 # npm pack 产物（推荐，绕开 Windows 本地目录 link: junction bug）
 dsh plugin --profile web add dsh-diff-stat-<version>.tgz
 
+# 或 GitHub 直装 —— lib/ 已提交，无需构建许可
+dsh plugin --profile web add github:HaoyueQin/dsh-diff-stat
+
 # 重启 dsh web 生效
 dsh web
 ```
