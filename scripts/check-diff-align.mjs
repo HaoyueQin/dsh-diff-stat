@@ -3,7 +3,8 @@
 // LTS versions fail with 'Unknown file extension ".ts"'. No build step,
 // no test framework.
 import assert from 'node:assert/strict'
-import { alignedHunkRows, CONTEXT_LINES } from '../src/client/diff-align.ts'
+import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client/diff-align.ts'
+import { diffStats } from '../src/client/diff-contract.ts'
 
 const kinds = rows => rows.map(r => r.kind)
 const lines = text => text.split('\n')
@@ -75,5 +76,48 @@ assert.deepEqual(kinds(rows), ['ctx', 'ctx', 'ctx', 'del', 'add', 'ctx', 'ctx', 
 assert.ok(!rows.some(r => r.kind === 'gap'))
 assert.deepEqual(rows.filter(r => r.kind === 'del').map(r => r.text), ['X', 'Y'])
 assert.deepEqual(rows.filter(r => r.kind === 'add').map(r => r.text), ['D', 'H'])
+
+// 11. changedLineCounts — the badge arithmetic — shares the renderer's LCS:
+//     shared locator/context lines count nowhere, so badge totals equal the
+//     colored rows the expanded window draws.
+
+// 11a. Screenshot case: a 4-line old side with 3 shared lines plus a 2-line
+//      insertion reads +2 −0 (the −4 block lines were all context).
+let counts = changedLineCounts(
+  lines('deps: {\nneverBundle: [...X],\nalwaysInlining: f,\n},'),
+  lines('deps: {\nneverBundle: [...X],\nalwaysInlining: f,\n// c\nonlyBundle: false,\n},'),
+)
+assert.deepEqual(counts, { added: 2, removed: 0 })
+
+// 11b. A middle-line replacement between locator lines (3 old / 2 new) reads +0 −1.
+counts = changedLineCounts(lines('a\nb\nc'), lines('a\nc'))
+assert.deepEqual(counts, { added: 0, removed: 1 })
+
+// 11c. No shared lines at all: the full block arithmetic.
+counts = changedLineCounts(lines('o1\no2\no3'), lines('n1\nn2'))
+assert.deepEqual(counts, { added: 2, removed: 3 })
+
+// 11d. Creation and wipe degenerate to one-sided totals.
+assert.deepEqual(changedLineCounts([], lines('a\nb')), { added: 2, removed: 0 })
+assert.deepEqual(changedLineCounts(lines('a\nb'), []), { added: 0, removed: 2 })
+
+// 11e. Over budget: null — the caller falls back to block arithmetic.
+assert.equal(changedLineCounts(big(1300), big(1300)), null)
+
+// 11f. diffStats over a mixed hunk list equals the rendered del/add rows
+//      (badge, body and footer share one arithmetic).
+const hunks = [
+  { path: 'f.ts', oldText: 'deps: {\nneverBundle: [...X],\nalwaysInlining: f,\n},', newText: 'deps: {\nneverBundle: [...X],\nalwaysInlining: f,\n// c\nonlyBundle: false,\n},' },
+  { path: 'g.ts', oldText: 'a\nb\nc', newText: 'a\nc' },
+  { path: 'h.ts', oldText: null, newText: 'fresh\nlines' },
+]
+let bodyAdd = 0
+let bodyDel = 0
+for (const hunk of hunks) {
+  const rendered = alignedHunkRows(hunk.oldText === null ? [] : lines(hunk.oldText), lines(hunk.newText))
+  bodyAdd += rendered.filter(r => r.kind === 'add').length
+  bodyDel += rendered.filter(r => r.kind === 'del').length
+}
+assert.deepEqual(diffStats(hunks), { added: bodyAdd, removed: bodyDel })
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')

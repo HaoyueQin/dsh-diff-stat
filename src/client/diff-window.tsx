@@ -20,9 +20,9 @@ interface DiffRow {
 }
 
 /**
- * Flatten hunks into rows plus the footer totals. Totals always use the full
- * block arithmetic (DiffBlock's), so folding never moves the numbers; only
- * the rendered row list is aligned and folded.
+ * Flatten hunks into rows plus the footer totals. The totals count exactly
+ * the rows the body renders — del/add ops of the same alignment — so the
+ * footer, the body's colored rows and the inline badge always agree.
  */
 function buildRows(diffs: readonly DiffHunk[]): { rows: readonly DiffRow[]; added: number; removed: number; files: number } {
   const rows: DiffRow[] = []
@@ -42,15 +42,21 @@ function buildRows(diffs: readonly DiffHunk[]): { rows: readonly DiffRow[]; adde
     prevPath = diff.path
     const newLines = contentLines(diff.newText)
     const oldLines = diff.oldText === null ? [] : contentLines(diff.oldText)
-    added += newLines.length
-    removed += oldLines.length
     const aligned = alignedHunkRows(oldLines, newLines)
     if (aligned === null) {
-      // Over-budget sides: plain blocks, exactly the pre-alignment rendering.
+      // Over-budget sides: plain blocks, exactly the pre-alignment rendering;
+      // the footer keeps the full block arithmetic to match.
       for (const line of oldLines) rows.push({ kind: 'del', text: line })
       for (const line of newLines) rows.push({ kind: 'add', text: line })
+      added += newLines.length
+      removed += oldLines.length
     } else {
-      for (const row of aligned) rows.push(row)
+      // Footer counts the very rows the body draws: no second arithmetic.
+      for (const row of aligned) {
+        rows.push(row)
+        if (row.kind === 'del') removed++
+        else if (row.kind === 'add') added++
+      }
     }
   }
   return { rows, added, removed, files: paths.size }

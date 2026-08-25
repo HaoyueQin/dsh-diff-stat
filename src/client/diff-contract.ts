@@ -11,6 +11,7 @@
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
+import { changedLineCounts } from './diff-align.ts'
 
 /** What the stock ui-tool rows pass to the `tool.call.toolview` keyed slots. */
 export interface ToolCallOwnerProps {
@@ -89,9 +90,13 @@ export interface DiffStats {
 }
 
 /**
- * Line-count totals over the given hunks, counting every old-side line as
- * removed and every new-side line as added — exactly DiffBlock's own footer
- * arithmetic, so the inline badge never disagrees with the expanded card.
+ * Changed-line totals over the given hunks (badge material), on the same
+ * basis as the rendered window: each hunk's two sides go through the same
+ * LCS alignment the DiffWindow draws, so the badge always equals the
+ * colored rows the expanded card shows — locator/context lines shared by
+ * both sides render grey and count nowhere. Hunks over the alignment budget
+ * fall back to the full block arithmetic (every old line removed, every new
+ * line added), matching the over-budget window's plain-block rendering.
  * @param diffs - the hunks backing the badge.
  * @returns non-negative totals; zeros for an empty list.
  */
@@ -99,8 +104,16 @@ export function diffStats(diffs: readonly DiffHunk[]): DiffStats {
   let added = 0
   let removed = 0
   for (const hunk of diffs) {
-    if (hunk.oldText !== null) removed += contentLines(hunk.oldText).length
-    added += contentLines(hunk.newText).length
+    const newLines = contentLines(hunk.newText)
+    const oldLines = hunk.oldText === null ? [] : contentLines(hunk.oldText)
+    const counted = changedLineCounts(oldLines, newLines)
+    if (counted === null) {
+      added += newLines.length
+      removed += oldLines.length
+    } else {
+      added += counted.added
+      removed += counted.removed
+    }
   }
   return { added, removed }
 }

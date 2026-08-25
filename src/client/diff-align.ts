@@ -3,12 +3,11 @@
  * lines both sides share, shared lines become context around each changed
  * run (CONTEXT_LINES per side, the GitHub/GitLab/VS Code convention), and
  * runs of untouched lines farther out collapse into single gap rows.
- * Rendering-level only: badge and footer totals keep counting every old/new
- * line with diff-contract's arithmetic, so numbers never depend on the fold.
+ * The same LCS walk also feeds changedLineCounts — the badge/footer
+ * arithmetic — so numbers and rendered rows share one source of truth.
  * ponytail: the context width is a fixed constant; promote it to plugin
  * config if a real request lands.
  */
-import { contentLines } from './diff-contract.ts'
 
 /** Unchanged context rows kept on each side of a changed run. */
 export const CONTEXT_LINES = 3
@@ -102,6 +101,33 @@ function collapse(ops: readonly AlignOp[], context: number): AlignedRow[] {
     }
   }
   return rows
+}
+
+/** True changed-line totals between two sides (the rendered del/add rows). */
+export interface ChangedCounts {
+  readonly added: number
+  readonly removed: number
+}
+
+/**
+ * Count the real changed lines between two sides: the del/add ops of the same
+ * LCS walk the renderer uses, so badge totals always equal the colored rows
+ * the expanded window draws — shared locator/context lines count nowhere.
+ * Returns null when either side exceeds the alignment budget; the caller then
+ * falls back to the full block arithmetic (every old line removed, every new
+ * line added), matching the over-budget window's plain-block rendering.
+ * @param oldLines - the pre-image content lines (empty for creations).
+ * @param newLines - the post-image content lines.
+ */
+export function changedLineCounts(oldLines: readonly string[], newLines: readonly string[]): ChangedCounts | null {
+  if (oldLines.length > ALIGN_MAX_SIDE_LINES || newLines.length > ALIGN_MAX_SIDE_LINES) return null
+  let added = 0
+  let removed = 0
+  for (const op of lcsOps(oldLines, newLines)) {
+    if (op.kind === 'del') removed++
+    else if (op.kind === 'add') added++
+  }
+  return { added, removed }
 }
 
 /**
