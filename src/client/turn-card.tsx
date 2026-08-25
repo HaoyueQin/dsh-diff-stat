@@ -3,19 +3,25 @@
  * completed turn's tail — "N 个文件已更改 +X −Y" — expanding to per-file rows
  * (name · directory · +n −m · 审查 · 打开|▾) with inline unified diffs.
  * Files and hunks come from the turn accumulator (turn-changes.ts), never the
- * closing prose. 系统打开 rides the stock openFile opener; the remaining
- * actions (撤销 / 内嵌查看 / 定向打开) arrive with the M4 host half and stay
- * hidden while it is absent.
+ * closing prose; run_code's edit/write dispatch sub-calls carry no turn
+ * coordinate on the wire, so the card joins them from the stock chat tool
+ * tree (turn-merge.ts) and renders the union. 系统打开 rides the stock
+ * openFile opener; the remaining actions (撤销 / 内嵌查看 / 定向打开) arrive
+ * with the M4 host half and stay hidden while it is absent.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14,
   IconCopyOutline16, IconFolderOpen16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ToolChatData, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type {
+  ToolCallBlock, TurnLocation, UseConversationSession,
+} from '@deepseek-ai/dsh-client-runtime/client'
 import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
+import { collectDispatchFiles, mergeChangedFiles } from './turn-merge.ts'
 import { NS, type DiffStatKey } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
@@ -30,13 +36,20 @@ function dirname(path: string): string {
   return at === -1 ? '' : path.slice(0, at)
 }
 
+/** Stable empty match so the join selector returns one reference while idle. */
+const EMPTY_FILES: readonly ChangedFile[] = []
+
 /** Full card props: the slot's match plus the owner currency and injected cwd reader. */
 export type TurnCardProps = {
   matched: readonly ChangedFile[]
+  /** The engine-owned closing Turn; its chat tool tree joins the PTC sub-calls. */
+  turn?: TurnLocation | undefined
   /** The owning session; resolves the workspace root for relative-path copy. */
   sessionId?: string | undefined
   /** Read the session workspace root, for relative-path copy. Absent → copy falls back to the absolute path. */
   getCwd?: ((sessionId: string | undefined) => string | undefined) | undefined
+  /** Session snapshot reader (slot standard prop); joins the dispatch sub-calls. */
+  useSession?: UseConversationSession | undefined
 } & Pick<TurnTailOwnerProps, 'openFile'> & PropsLocale<typeof NS>
 
 /** Totals across files, for the collapsed bar. */
@@ -55,14 +68,30 @@ function totals(files: readonly ChangedFile[]): { added: number; removed: number
  * The turn-tail summary card.
  * @param props - matched files from the slot select, plus the opener and cwd reader.
  */
-export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardProps) {
+export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSession, t }: TurnCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
   const [peeked, setPeeked] = useState<ReadonlySet<string>>(() => new Set())
   const [hostReady, setHostReady] = useState(false)
   const [undoState, setUndoState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
-  const total = useMemo(() => totals(matched), [matched])
+
+  // The PTC half: join this Turn's edit/write dispatch sub-calls from the
+  // stock chat tool tree (the accumulator cannot route them — dispatch
+  // records carry no turn coordinate). Pure snapshot read; empty while idle.
+  const dispatchFiles = useSession?.(snapshot => {
+    if (turn === undefined) return EMPTY_FILES
+    const files: ChangedFile[] = []
+    for (const key of snapshot.chat.locations.getTurn(turn.turn)) {
+      const node = snapshot.chat.nodes.get(key)
+      if (node === undefined || node.kind !== 'tool-call') continue
+      const root = (node.data as ToolChatData | undefined)?.root
+      if (root !== undefined) collectDispatchFiles(root as ToolCallBlock, files)
+    }
+    return files
+  }) ?? EMPTY_FILES
+  const allFiles = useMemo(() => mergeChangedFiles(matched, dispatchFiles), [matched, dispatchFiles])
+  const total = useMemo(() => totals(allFiles), [allFiles])
 
   // Host half probe: the dependent actions (撤销/内嵌查看/定向打开) stay
   // hidden while the server route is absent.
@@ -90,14 +119,14 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
     void (async () => {
       const result = await hostCall<{ ok: boolean }>('undo', {
         cwd,
-        files: matched.map(file => ({
+        files: allFiles.map(file => ({
           path: file.path,
           diffs: file.diffs.map(hunk => ({ oldText: hunk.oldText, newText: hunk.newText })),
         })),
       })
       setUndoState(result !== null && result.ok ? 'done' : 'error')
     })()
-  }, [undoState, cwd, matched])
+  }, [undoState, cwd, allFiles])
 
   const toggleRevealed = useCallback((path: string) => {
     setRevealed(prev => {
@@ -138,7 +167,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
     else if (id === 'copy-rel') copyPath(path)
   }, [openFile, copyPath, togglePeeked, cwd])
 
-  if (matched.length === 0) return null
+  if (allFiles.length === 0) return null
 
   return (
     <div className={css.card} data-diff-stat-card="">
@@ -151,7 +180,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
         <span className={css.chevron + (expanded ? ' ' + css.chevronOpen : '')} aria-hidden>
           <IconChevronRightOutline14 size={12} />
         </span>
-        <span className={css.summary}>{t('card.filesChanged', { count: matched.length })}</span>
+        <span className={css.summary}>{t('card.filesChanged', { count: allFiles.length })}</span>
         <span className={css.badge} data-diffstat="">
           <span className={css.add}>+{total.added}</span>
           <span className={css.del}>−{total.removed}</span>
@@ -170,7 +199,7 @@ export function TurnCard({ matched, sessionId, openFile, getCwd, t }: TurnCardPr
       </button>
       {expanded && (
         <div className={css.list}>
-          {matched.map(file => {
+          {allFiles.map(file => {
             const name = basename(file.path)
             const dir = dirname(file.path)
             const stats = diffStats(file.diffs)

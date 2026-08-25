@@ -22,6 +22,10 @@ interface ChangedEntry {
 /** Immutable changed-file facts published against one Turn. */
 export interface TurnChangesTurnData {
   readonly changed: readonly ChangedEntry[]
+  /** Whether any run_code root call started in this Turn: its edit/write
+   *  sub-calls carry no turn coordinate, so the card joins them from the chat
+   *  tool tree instead of the accumulator. */
+  readonly hasCodeDispatch: boolean
 }
 
 declare module '@deepseek-ai/dsh-client-runtime/client' {
@@ -129,8 +133,14 @@ export function changesForClosing(
  * @returns Changed files as the component's match, or null to decline before mount.
  */
 export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedFile[] | null {
-  const files = changesForClosing(owner.turn.data.get('diff-stat'), owner.seq)
-  return files.length === 0 ? null : files
+  const data = owner.turn.data.get('diff-stat')
+  const files = changesForClosing(data, owner.seq)
+  if (files.length > 0) return files
+  // A run_code turn may still have changed files: its edit/write dispatch
+  // sub-calls carry no turn coordinate, so they never enter the accumulator.
+  // Claiming with an empty match mounts the card, which joins them from the
+  // stock chat tool tree; a turn with nothing to show renders null.
+  return data?.hasCodeDispatch === true ? [] : null
 }
 
 /** Turn-local successful mutation accumulator; it publishes no view Node. */
@@ -156,7 +166,7 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
   },
   start: (_context, match) => {
     if (match.event.type !== 'turn/start') throw new Error('diff-stat changes start requires turn/start')
-    return { turn: match.event.data.turn, calls: new Map(), subCalls: new Set(), changed: [] }
+    return { turn: match.event.data.turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
   },
   update: (context, match) => {
     if (match.event.type === 'tool/call') {
@@ -169,7 +179,11 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
         argsRaw: String(match.event.data.arguments ?? ''),
         view: match.view?.for === 'call' ? match.view.view : null,
       })
-      return { ...context.state, calls }
+      return {
+        ...context.state,
+        calls,
+        hasCodeDispatch: context.state.hasCodeDispatch || match.event.data.name === 'run_code',
+      }
     }
     if (match.event.type === 'tool/result') {
       const result = match.event.data.message.content[0]
@@ -216,7 +230,7 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
       kind: 'turn',
       turn: context.state.turn,
       key: 'diff-stat',
-      value: { changed: context.state.changed },
+      value: { changed: context.state.changed, hasCodeDispatch: context.state.hasCodeDispatch },
     },
 }
 

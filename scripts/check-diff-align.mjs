@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client/diff-align.ts'
 import { diffStats } from '../src/client/diff-contract.ts'
+import { collectDispatchFiles, mergeChangedFiles } from '../src/client/turn-merge.ts'
 
 const kinds = rows => rows.map(r => r.kind)
 const lines = text => text.split('\n')
@@ -119,5 +120,44 @@ for (const hunk of hunks) {
   bodyDel += rendered.filter(r => r.kind === 'del').length
 }
 assert.deepEqual(diffStats(hunks), { added: bodyAdd, removed: bodyDel })
+
+// 12. turn-merge — the card's PTC join: dispatch sub-calls fold into per-file
+//     entries off the stock tool tree; errored and non-mutation calls count
+//     nowhere; merging never mutates its inputs.
+const settledSub = (callId, name, argsRaw, isError) => ({
+  kind: 'tool-result', seq: 0, time: 0, callId,
+  call: { name, argsRaw },
+  content: [], isError, callView: null, resultView: null, subCalls: [],
+})
+const root = {
+  kind: 'tool-result', seq: 0, time: 0, callId: 'root',
+  call: { name: 'run_code', argsRaw: '{}' },
+  content: [], isError: false, callView: null, resultView: null,
+  subCalls: [
+    settledSub('s1', 'edit', JSON.stringify({ file_path: 'a.ts', old_string: 'x', new_string: 'y' }), false),
+    settledSub('s2', 'write', JSON.stringify({ file_path: 'b.ts', content: 'hi\n' }), false),
+    settledSub('s3', 'edit', '{}', true),
+    settledSub('s4', 'read', '{}', false),
+  ],
+}
+const joined = collectDispatchFiles(root, [])
+assert.equal(joined.length, 2)
+assert.equal(joined[0].path, 'a.ts')
+assert.deepEqual(diffStats(joined[0].diffs), { added: 1, removed: 1 })
+assert.equal(joined[1].path, 'b.ts')
+assert.deepEqual(diffStats(joined[1].diffs), { added: 1, removed: 0 })
+
+const nativeFiles = [{ path: 'a.ts', diffs: [{ path: 'a.ts', oldText: 'n', newText: 'm' }] }]
+const dispatchFiles = [
+  { path: 'a.ts', diffs: [{ path: 'a.ts', oldText: 'x', newText: 'y' }] },
+  { path: 'c.ts', diffs: [{ path: 'c.ts', oldText: null, newText: 'z' }] },
+]
+const mergedFiles = mergeChangedFiles(nativeFiles, dispatchFiles)
+assert.equal(mergedFiles.length, 2)
+assert.equal(mergedFiles[0].path, 'a.ts')
+assert.equal(mergedFiles[0].diffs.length, 2)
+assert.equal(mergedFiles[1].path, 'c.ts')
+assert.equal(nativeFiles[0].diffs.length, 1)
+assert.equal(mergeChangedFiles(nativeFiles, []), nativeFiles)
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')
