@@ -62,7 +62,7 @@ function rowModel(toolName: string, block: ToolCallBlock, cwd?: string): {
   errorSummary: string | null
   state: ToolRowState
 } {
-  const variant = (toolName === 'edit' ? 'edit' : 'write') as ToolRowVariant
+  const variant = (toolName === 'write' ? 'write' : 'edit') as ToolRowVariant
   const done = 'kind' in block
   const argsRaw = (done ? block.call?.argsRaw : block.argsRaw) ?? ''
   const state: ToolRowState = !done ? 'running'

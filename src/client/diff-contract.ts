@@ -140,14 +140,28 @@ export function diffStats(diffs: readonly DiffHunk[]): DiffStats {
 }
 
 /**
+ * Whether a wire Tool name is one of the file-mutation tools this plugin
+ * takes over and counts. `str_replace_editor` is the minimal agent preset's
+ * editor (command-dispatched: create / str_replace / insert; its read-only
+ * `view` maps to no hunks below).
+ * @param name - the wire Tool name.
+ */
+export function isMutationToolName(name: string): boolean {
+  return name === 'edit' || name === 'write' || name === 'str_replace_editor'
+}
+
+/**
  * The call-time diff hunks the mutation tools' own `presentCall` derives from
  * their arguments: an edit renders its literal old_string→new_string
  * replacement, a write renders its full content as a create (`oldText: null`,
- * which also represents an overwrite without prior content). Code Dispatch
- * sub-calls never carry a wire view (the dispatch bridge logs no presentation
- * metadata), so this args fallback is the only diff material those cards can
- * render — mirroring what the stock row shows for the same call while running.
- * @param toolName - the wire Tool name ('edit' or 'write').
+ * which also represents an overwrite without prior content), and the minimal
+ * preset's str_replace_editor maps its create/str_replace/insert commands to
+ * the same shapes over its `path`/`old_str`/`new_str`/`file_text` arguments
+ * (its read-only `view` maps to nothing). Code Dispatch sub-calls never carry
+ * a wire view (the dispatch bridge logs no presentation metadata), so this
+ * args fallback is the only diff material those cards can render — mirroring
+ * what the stock row shows for the same call while running.
+ * @param toolName - the wire Tool name ('edit', 'write', or 'str_replace_editor').
  * @param argsRaw - the frozen call arguments.
  * @returns the call-time hunks, or null when the tool or its args do not map.
  */
@@ -166,6 +180,27 @@ export function callTimeDiffs(toolName: string, argsRaw: string): DiffHunk[] | n
     const newString = stringArg(args, 'new_string')
     if (path === undefined || oldString === undefined || newString === undefined) return null
     return [{ path, oldText: oldString || null, newText: newString }]
+  }
+  if (toolName === 'str_replace_editor') {
+    const path = stringArg(args, 'path')
+    if (path === undefined) return null
+    const command = stringArg(args, 'command')
+    if (command === 'create') {
+      const fileText = stringArg(args, 'file_text')
+      if (fileText === undefined) return null
+      return [{ path, oldText: null, newText: fileText }]
+    }
+    if (command === 'str_replace') {
+      const oldString = stringArg(args, 'old_str')
+      const newString = stringArg(args, 'new_str')
+      if (oldString === undefined || newString === undefined) return null
+      return [{ path, oldText: oldString || null, newText: newString }]
+    }
+    if (command === 'insert') {
+      const newString = stringArg(args, 'new_str')
+      if (newString === undefined) return null
+      return [{ path, oldText: null, newText: newString }]
+    }
   }
   return null
 }

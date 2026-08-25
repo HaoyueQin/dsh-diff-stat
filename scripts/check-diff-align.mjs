@@ -7,7 +7,7 @@ import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client
 import { diffStats } from '../src/client/diff-contract.ts'
 import { collectDispatchFiles, mergeChangedFiles } from '../src/client/turn-merge.ts'
 import { boostHunkWithContext, BOOST_CONTEXT_LINES } from '../src/client/context-boost.ts'
-import { isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
+import { callTimeDiffs, isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
 
 const kinds = rows => rows.map(r => r.kind)
 const lines = text => text.split('\n')
@@ -203,5 +203,28 @@ assert.deepEqual(
 
 // 13f. One-line file: no context to add → null (caller keeps the fragment).
 assert.equal(boostHunkWithContext({ path: 'f.ts', oldText: 'only', newText: 'ONLY' }, lines('ONLY')), null)
+
+// 14. str_replace_editor — the minimal preset's editor maps its commands to
+//     the same hunk shapes over path/old_str/new_str/file_text; view is read-only.
+const created = callTimeDiffs('str_replace_editor', JSON.stringify({ command: 'create', path: 'n.md', file_text: '# hi\n' }))
+assert.deepEqual(created, [{ path: 'n.md', oldText: null, newText: '# hi\n' }])
+const replaced = callTimeDiffs('str_replace_editor', JSON.stringify({ command: 'str_replace', path: 'a.py', old_str: 'A', new_str: 'B' }))
+assert.deepEqual(replaced, [{ path: 'a.py', oldText: 'A', newText: 'B' }])
+const inserted = callTimeDiffs('str_replace_editor', JSON.stringify({ command: 'insert', path: 'a.py', insert_line: 2, new_str: 'added' }))
+assert.deepEqual(inserted, [{ path: 'a.py', oldText: null, newText: 'added' }])
+assert.equal(callTimeDiffs('str_replace_editor', JSON.stringify({ command: 'view', path: 'a.py' })), null)
+assert.equal(callTimeDiffs('str_replace_editor', '{}'), null)
+
+// 14b. collectDispatchFiles picks str_replace_editor sub-calls up too.
+const editorRoot = {
+  kind: 'tool-result', seq: 0, time: 0, callId: 'root2',
+  call: { name: 'run_code', argsRaw: '{}' },
+  content: [], isError: false, callView: null, resultView: null,
+  subCalls: [settledSub('e1', 'str_replace_editor', JSON.stringify({ command: 'str_replace', path: 'x.py', old_str: 'a', new_str: 'b' }), false)],
+}
+const joinedEditor = collectDispatchFiles(editorRoot, [])
+assert.equal(joinedEditor.length, 1)
+assert.equal(joinedEditor[0].path, 'x.py')
+assert.deepEqual(diffStats(joinedEditor[0].diffs), { added: 1, removed: 1 })
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')

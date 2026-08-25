@@ -32,8 +32,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services: the slot registry, the event assembler, the session directory (cwd for path copy), and locale. */
 export const inject = ['slots', 'conversationEvents', 'sessions', 'locale']
 
-/** The tool keys this plugin takes over (the wire tools that emit diff cards). */
-const MUTATION_TOOLS = ['edit', 'write'] as const
+/** The tool keys this plugin takes over (the wire tools that emit diff cards).
+ *  `str_replace_editor` is the minimal agent preset's editor. */
+const MUTATION_TOOLS = ['edit', 'write', 'str_replace_editor'] as const
 
 /**
  * Mount the badge rows and the turn summary card.
