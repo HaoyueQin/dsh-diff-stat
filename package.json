@@ -2,12 +2,21 @@
   "name": "dsh-diff-stat",
   "version": "0.0.1",
   "description": "Inline +N −M diff badges on edit/write tool rows and a per-turn file change summary card for DeepSeek Harness. PTC/code-dispatch fallback, no git required.",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "dsh-plugin",
+    "diff",
+    "code-review"
+  ],
   "type": "module",
   "main": "./lib/index.js",
   "files": [
     "lib",
     "cordis.patch.yml"
   ],
+  "author": "HaoyueQin",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,30 +26,14 @@
   "bugs": {
     "url": "https://github.com/HaoyueQin/dsh-diff-stat/issues"
   },
-  "peerDependencies": {
-    "@deepseek-ai/dsh-client-runtime": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-conversation": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-primitives": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
-    "cordis": "^4.0.0-rc.7",
-    "react": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.13.3",
-    "@types/react": "~18.3.1",
-    "@types/react-dom": "^18.3.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "lightningcss": "^1.30.0",
-    "typescript": "^5.9.0",
-    "tsdown": "^0.22.14"
-  },
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "build": "bash scripts/build.sh",
-    "prepack": "bash scripts/build.sh && npm run build:client",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
+    "build": "pnpm run build:clean && tsdown",
+    "prepare": "pnpm run build",
+    "watch": "tsdown --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "check:align": "node scripts/check-diff-align.mjs",
-    "build:client": "tsdown && node scripts/normalize-client-paths.mjs"
+    "build:clean": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\""
   },
   "exports": {
     ".": "./lib/index.js",
@@ -60,5 +53,31 @@
       ],
       "platform": "web"
     }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-ui-primitives": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.0.1-rc.1 <0.1.0 || >=0.1.0-rc.1 <0.2.0-0",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-atomic-write": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.1-rc.2",
+    "@deepseek-ai/dsh-client-locale": "^0.1.1-rc.2",
+    "@types/node": "^24.13.3",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "clsx": "^2.1.1",
+    "lightningcss": "^1.30.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.0"
   }
 }

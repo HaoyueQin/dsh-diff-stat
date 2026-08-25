@@ -18,9 +18,10 @@ import {
   DisclosureRow, IconEditOutline16, IconInspectOutline12, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
-// The stock row's stylesheet, imported through the package's exported src
-// subpath and inlined — the takeover row renders with the exact stock chrome.
-import rowCss from '@deepseek-ai/dsh-client-ui-tool/src/client/tool/components/ToolRow.module.css'
+// The stock row's stylesheet, vendored verbatim into ./tool-row.module.css
+// (the npm ui-tool tarball omits src/) and inlined — the takeover row renders
+// with the exact stock chrome.
+import rowCss from './tool-row.module.css'
 import badgeCss from './badge.module.css'
 import { DiffWindow } from './diff-window.tsx'
 import { diffCardModel, diffStats, parseArgs } from './diff-contract.ts'

@@ -1,11 +1,24 @@
 /**
- * tsdown preset for dsh-diff-stat: a browser half (lib/client.js) wrapped for
- * the harness client-plugin loader. Platform module-table entries stay
- * external; everything else inlines. CSS Modules compile through lightningcss
- * into a <style data-plugin> tag injected at factory execution (removed on
- * unload) — the stock ToolRow stylesheet rides in through the ui-tool package's
- * exported src subpath so the takeover row keeps the exact stock chrome.
+ * tsdown preset for dsh-diff-stat — one `tsdown` run builds both halves.
+ *
+ * Node half (`lib/index.js`): plain ESM transpile of the host plugin. cordis
+ * and @deepseek-ai/dsh-atomic-write stay external (the harness provides them
+ * at runtime); node builtins are external via platform: 'node'. Types are
+ * checked, not emitted (`pnpm typecheck`, noEmit).
+ *
+ * Browser half (`lib/client.js`): closure-factory bundle for the harness
+ * client-plugin loader. Platform module-table entries stay external;
+ * everything else inlines. CSS Modules compile through lightningcss into a
+ * <style data-plugin> tag injected at factory execution (removed on unload) —
+ * the stock ToolRow stylesheet is vendored verbatim into
+ * src/client/tool-row.module.css (the npm ui-tool tarball omits src/) so the
+ * takeover row keeps the exact stock chrome.
  * Structure ported from @dsh-external/dsh-diff-viewer's proven preset.
+ *
+ * lib/ is committed (github: installs), so artifacts must be byte-stable
+ * across machines: every bundled module resolves inside the project (npm deps
+ * pinned by the lockfile) and comments: false drops preserved source
+ * comments, so emitted artifacts carry only project-relative region labels.
  */
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -17,6 +30,9 @@ import type { UserConfig } from 'tsdown'
 const require = createRequire(import.meta.url)
 const PROJECT_ROOT = dirname(fileURLToPath(import.meta.url))
 const PLUGIN_ID = 'dsh-diff-stat'
+
+/** Host-half packages resolved by the harness at runtime — never inlined. */
+const LIB_EXTERNALS = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-atomic-write'] as const
 
 /** Module specifiers the dsh web shell shares into its frozen module table. */
 const PLATFORM_MODULES = [
@@ -32,6 +48,27 @@ const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES, '@deepseek-ai/
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 
+const libBundle: UserConfig = {
+  entry: { index: 'src/index.ts' },
+  outDir: 'lib',
+  format: ['esm'],
+  platform: 'node',
+  target: 'es2023',
+  dts: false,
+  clean: false,
+  sourcemap: false,
+  // ESM output must land at lib/index.js (the package main), not .mjs.
+  fixedExtension: false,
+  deps: {
+    neverBundle: [...LIB_EXTERNALS],
+  },
+  outputOptions: {
+    // Drop preserved source comments (JSDoc etc.); rolldown's own //#region
+    // labels stay but reference only project-relative paths.
+    comments: false,
+  },
+}
+
 const clientBundle: UserConfig = {
   entry: { client: 'src/client/index.ts' },
   outDir: 'lib',
@@ -46,6 +83,8 @@ const clientBundle: UserConfig = {
   deps: {
     neverBundle: [...CLIENT_EXTERNALS],
     alwaysBundle: (id: string) => !CLIENT_EXTERNALS.includes(id),
+    // Inlining every non-table dep (clsx etc.) is the intent; silence the hint.
+    onlyBundle: false,
   },
   plugins: [{
     // Bundle purity gate: platform seed entries stay external, every other
@@ -55,7 +94,6 @@ const clientBundle: UserConfig = {
     resolveId(source: string) {
       if (!source.startsWith('@deepseek-ai/')) return null
       if (CLIENT_EXTERNALS.includes(source)) return null
-      if (source.startsWith('@deepseek-ai/dsh-client-ui-tool/src/') && source.endsWith('.module.css')) return null
       throw new Error(
         'client bundle purity: "' + source + '" is not a platform module (CLIENT_EXTERNALS) — '
         + 'cross-plugin value imports are forbidden; collaborate through cordis services',
@@ -105,10 +143,7 @@ const clientBundle: UserConfig = {
   }],
   outputOptions: {
     entryFileNames: 'client.js',
-    // Strip bundler comments: the `//#region <module path>` labels embed the
-    // checkout-relative dependency path, which differs between machines and
-    // would make the committed lib/ non-reproducible. Comments carry no
-    // runtime value here, so strip them all for a byte-stable artifact.
+    // Same comment policy as the node half above.
     comments: false,
     banner: 'window.__ModuleLoader__.load({ id: ' + JSON.stringify(PLUGIN_ID) + ', factory: (require) => {',
     footer: 'return module.exports; } });',
@@ -117,4 +152,4 @@ const clientBundle: UserConfig = {
   },
 }
 
-export default [clientBundle] satisfies UserConfig[]
+export default [libBundle, clientBundle] satisfies UserConfig[]

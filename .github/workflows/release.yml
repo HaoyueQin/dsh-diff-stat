@@ -1,3 +1,6 @@
+# A pushed version tag IS the release: verify the tagged tree, then open the
+# GitHub Release with generated notes and the pack tarballs. The npm publish
+# stays a separate manual step (it requires the owner's 2FA OTP).
 name: Release
 
 on:
@@ -11,82 +14,32 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      DSH_CHECKOUT: ${{ github.workspace }}/dsh
     steps:
-      - name: Checkout plugin
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      # pnpm version comes from the packageManager field in package.json only
+      # (a "version" input alongside packageManager is a hard error in
+      # pnpm/action-setup).
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
         with:
-          path: plugin
-
-      - name: Checkout deepseek-harness (plugin build-time dependency source)
-        uses: actions/checkout@v4
-        with:
-          repository: deepseek-ai/deepseek-harness
-          # Pinned to the same rc.2-era commit the plugin targets.
-          ref: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
-          path: dsh
-          fetch-depth: 1
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          # Match the checked-out harness packageManager (no root manifest).
-          version: 11.7.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
-          cache-dependency-path: dsh/pnpm-lock.yaml
-
-      - name: Build harness (tsc emits lib runtimes)
-        working-directory: dsh
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build:lib
-
-      - name: Install plugin
-        working-directory: plugin
-        run: npm install --legacy-peer-deps --no-audit --no-fund
-
-      - name: Build plugin (host half + client bundle)
-        working-directory: plugin
-        run: |
-          bash scripts/build.sh
-          npm run build:client
-
-      - name: Typecheck
-        working-directory: plugin
-        run: npm run typecheck
-
-      - name: Diff alignment checks
-        working-directory: plugin
-        run: npm run check:align
-
-      - name: Verify committed lib matches the fresh build
-        working-directory: plugin
-        run: |
-          if ! git diff --exit-code -- lib/; then
-            echo "::error::lib/ differs from the fresh build — rebuild and commit lib/ together with source changes"
-            exit 1
-          fi
-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm check:align
+      - run: pnpm build
+      - run: git diff --exit-code -- lib/
       - name: Pack tarball
-        working-directory: plugin
         run: |
           mkdir -p dist
-          npm pack --pack-destination dist
-          # Versioned asset plus a fixed-name copy: the marketplace `tarball:`
+          pnpm pack --pack-destination dist
+          # Versioned asset plus a fixed-name copy: the marketplace tarball:
           # field points at releases/latest/download/<fixed>.tgz, which must
           # keep resolving to the newest build across versions.
           cp "dist/$(ls dist | head -1)" dist/dsh-diff-stat.tgz
           echo "TARBALL=$(ls dist/*.tgz | head -1)" >> "$GITHUB_ENV"
           echo "FIXED_TARBALL=dist/dsh-diff-stat.tgz" >> "$GITHUB_ENV"
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        working-directory: plugin
         run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME" "$TARBALL" "$FIXED_TARBALL"

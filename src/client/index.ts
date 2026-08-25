@@ -13,7 +13,7 @@
  * the same argument fallback) and claims the chat turn-tail chain with a
  * collapsible per-turn summary card.
  */
-import type { ClientContext, ISessions } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ISessions, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { subscribeGlassReady } from './glass.ts'
@@ -102,7 +102,7 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
     select: selectChangedFiles,
     inject: () => ({
       getCwd: (sessionId: string | undefined) => (
-        sessionId === undefined ? undefined : sessions.list.getSnapshot().byId[sessionId]?.cwd
+        sessionId === undefined ? undefined : sessions.list.getSnapshot().byId[sessionId as SessionId]?.cwd
       ),
       t: t as PropsLocale<typeof NS>['t'],
     }),

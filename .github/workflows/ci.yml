@@ -11,66 +11,24 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout plugin
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      # pnpm version comes from the packageManager field in package.json only
+      # (a "version" input alongside packageManager is a hard error in
+      # pnpm/action-setup).
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
         with:
-          path: plugin
-
-      - name: Checkout deepseek-harness (plugin build-time dependency source)
-        uses: actions/checkout@v4
-        with:
-          repository: deepseek-ai/deepseek-harness
-          # Pinned to the same rc.2-era commit the plugin targets; the harness
-          # moves, and a pinned build keeps CI reproducible.
-          ref: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
-          path: dsh
-          fetch-depth: 1
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          # Match the checked-out harness packageManager (no root manifest).
-          version: 11.7.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
-          cache-dependency-path: dsh/pnpm-lock.yaml
-
-      - name: Build harness (tsc emits lib runtimes)
-        working-directory: dsh
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build:lib
-
-      - name: Install plugin
-        working-directory: plugin
-        run: npm install --legacy-peer-deps --no-audit --no-fund
-
-      - name: Build plugin (host half + client bundle)
-        working-directory: plugin
-        env:
-          DSH_CHECKOUT: ${{ github.workspace }}/dsh
-        run: |
-          bash scripts/build.sh
-          npm run build:client
-
-      - name: Typecheck
-        working-directory: plugin
-        run: npm run typecheck
-
-      - name: Diff alignment checks
-        working-directory: plugin
-        run: npm run check:align
-
-      - name: Verify committed lib matches the fresh build
-        working-directory: plugin
-        run: |
-          # lib/ is committed so github: repo-url installs work; a source
-          # change without a rebuilt lib would ship stale artifacts.
-          if ! git diff --exit-code -- lib/; then
-            echo "::error::lib/ differs from the fresh build — rebuild and commit lib/ together with source changes"
-            exit 1
-          fi
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # Native TS type stripping needs Node >= 23.6 (backported to 22.18);
+      # pinned to 24, the line the check was verified on.
+      - run: pnpm check:align
+      - run: pnpm build
+      # lib/ is committed so github: repo-url installs work without build
+      # rights; a source change without a rebuilt lib would ship stale
+      # artifacts. All bundled modules resolve inside the project with
+      # lockfile-pinned versions, so the build is byte-stable across machines
+      # and this diff must be empty.
+      - run: git diff --exit-code -- lib/

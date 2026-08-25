@@ -59,10 +59,10 @@ dsh plugin --profile web remove dsh-diff-stat
 ## Development
 
 ```sh
-npm install --legacy-peer-deps          # devDependencies (peers are dsh-internal packages)
-DSH_CHECKOUT=<dsh checkout> bash scripts/build.sh   # host half → lib/ (junction links + tsc)
-npm run build:client                    # browser half → lib/client.js (tsdown)
-npm run typecheck                       # both halves via tsc
+pnpm install        # devDependencies; prepare builds lib/ automatically
+pnpm build          # host half → lib/index.js + browser half → lib/client.js (one tsdown run)
+pnpm typecheck      # both halves via tsc
+pnpm check:align    # diff aligner assertions (needs Node >= 23.6)
 ```
 
 ## License

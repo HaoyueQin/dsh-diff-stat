@@ -59,10 +59,10 @@ dsh plugin --profile web remove dsh-diff-stat
 ## 开发
 
 ```sh
-npm install --legacy-peer-deps          # devDependencies（peer 均为 dsh 内部包）
-DSH_CHECKOUT=<dsh checkout> bash scripts/build.sh   # host 半 → lib/（junction 链接 + tsc）
-npm run build:client                    # 浏览器半 → lib/client.js（tsdown）
-npm run typecheck                       # 双端 tsc
+pnpm install        # devDependencies；prepare 会自动构建 lib/
+pnpm build          # host 半 → lib/index.js + 浏览器半 → lib/client.js（一次 tsdown）
+pnpm typecheck      # 双端 tsc
+pnpm check:align    # 对齐引擎断言（需 Node >= 23.6）
 ```
 
 ## License

@@ -3,3 +3,4 @@ lib/*.tsbuildinfo
 *.tsbuildinfo
 *.tgz
 .npmrc
+dist/

@@ -26,7 +26,7 @@ import { spawn } from 'node:child_process'
 import { readFile, lstat, realpath, unlink } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 
 export const name = 'dsh-diff-stat'
