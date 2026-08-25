@@ -40,11 +40,14 @@
 ## 安装
 
 ```sh
-# npm pack 产物（推荐，绕开 Windows 本地目录 link: junction bug）
-dsh plugin --profile web add dsh-diff-stat-<version>.tgz
-
-# 或 GitHub 直装 —— lib/ 已提交，无需构建许可
+# 从 GitHub 安装（lib/ 已入库，无需构建许可）
 dsh plugin --profile web add github:HaoyueQin/dsh-diff-stat
+
+# 或从 GitHub Release tarball 安装
+dsh plugin --profile web add https://github.com/HaoyueQin/dsh-diff-stat/releases/latest/download/dsh-diff-stat.tgz
+
+# 从 npm 安装（发布后可用）
+dsh plugin --profile web add dsh-diff-stat
 
 # 重启 dsh web 生效
 dsh web

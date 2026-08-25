@@ -40,11 +40,14 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 ## Install
 
 ```sh
-# npm pack tarball (recommended; sidesteps the Windows local-dir link: junction bug)
-dsh plugin --profile web add dsh-diff-stat-<version>.tgz
-
-# or direct from GitHub — lib/ is committed, no build permission needed
+# from GitHub (lib/ is committed — no build permission needed)
 dsh plugin --profile web add github:HaoyueQin/dsh-diff-stat
+
+# or from the GitHub Release tarball
+dsh plugin --profile web add https://github.com/HaoyueQin/dsh-diff-stat/releases/latest/download/dsh-diff-stat.tgz
+
+# from npm (once published)
+dsh plugin --profile web add dsh-diff-stat
 
 # restart dsh web to take effect
 dsh web
