@@ -11,6 +11,7 @@ import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { mutationHunks, parseArgs, type WireView } from './diff-contract.ts'
+import { claimFor } from './turn-merge.ts'
 
 /** One settled mutation's file and hunks, in settlement order. */
 interface ChangedEntry {
@@ -96,39 +97,11 @@ function codeDispatchData(event: { readonly type: string; readonly data?: unknow
 }
 
 /**
- * Files changed by one Turn data value, merged per path.
- *
- * Same-file entries collapse into one row with hunks appended in settlement
- * order, so a file written and then edited in the same turn reads as one
- * entry with combined +N −M. The Conversation Location index owns turn
- * membership before this runs, so paths cannot spill across turns.
- * @param data - engine-published diff-stat data for one Turn.
- * @param seq - closing Assistant seq; later Tool settlements are excluded.
- * @returns Changed files in first-seen order; empty when the turn wrote nothing.
+ * Files changed by one Turn data value, merged per path — the pure merge
+ * lives in turn-merge.ts next to the claim decision it feeds (zero runtime
+ * imports there, so the check script can exercise both directly).
  */
-export function changesForClosing(
-  data: Readonly<TurnChangesTurnData> | undefined,
-  seq = Number.POSITIVE_INFINITY,
-): readonly ChangedFile[] {
-  if (data === undefined) return []
-  const files: Array<{ path: string; diffs: DiffHunk[] }> = []
-  const byPath = new Map<string, { path: string; diffs: DiffHunk[] }>()
-  for (const entry of data.changed) {
-    if (entry.seq > seq) continue
-    const existing = byPath.get(entry.path)
-    if (existing === undefined) {
-      const created = { path: entry.path, diffs: [...entry.diffs] }
-      byPath.set(entry.path, created)
-      files.push(created)
-    } else {
-      existing.diffs.push(...entry.diffs)
-    }
-  }
-  return files
-}
-
-/** Stable empty match: claiming runs render null instead of remounting loops. */
-export const EMPTY_CHANGED_FILES: readonly ChangedFile[] = []
+export { changesForClosing, claimFor } from './turn-merge.ts'
 
 /**
  * Per-published-data memo of the claimed match. The chain select re-runs on
@@ -153,14 +126,7 @@ export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedF
   }
   const cached = bySeq.get(owner.seq)
   if (cached !== undefined) return cached
-  const files = changesForClosing(data, owner.seq)
-  const result = files.length > 0
-    ? files
-    // A run_code turn may still have changed files: its edit/write dispatch
-    // sub-calls carry no turn coordinate, so they never enter the accumulator.
-    // Claiming with an empty match mounts the card, which joins them from the
-    // stock chat tool tree; a turn with nothing to show renders null.
-    : data.hasCodeDispatch ? EMPTY_CHANGED_FILES : null
+  const result = claimFor(data, owner.seq)
   bySeq.set(owner.seq, result)
   return result
 }

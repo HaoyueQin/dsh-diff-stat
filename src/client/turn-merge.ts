@@ -1,15 +1,65 @@
 /**
- * The PTC half of the turn summary card's data. Code-dispatch sub-calls carry
- * no turn coordinate on the wire, so they never enter the turn accumulator;
- * instead the card joins them from the stock chat tool tree — the 'tool-call'
- * nodes already fold every dispatch into its root call's subCalls by
- * rootCallId. Pure data helpers: no React, no runtime imports, so the
- * alignment check script can exercise them directly.
+ * Pure data helpers for the turn summary card. Two concerns live here:
+ * the chain-claim decision (claimFor — whether a Turn's published data
+ * claims the card, including the run_code case whose dispatch sub-calls
+ * carry no turn coordinate and are joined from the stock chat tool tree
+ * instead, folded into their root call's subCalls by rootCallId), and the
+ * per-file merge of native and joined files. No React, no runtime imports,
+ * so the alignment check script can exercise them directly.
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
 import { callTimeDiffs, isMutationToolName, markArgHunks } from './diff-contract.ts'
-import type { ChangedFile } from './turn-changes.ts'
+import type { ChangedFile, TurnChangesTurnData } from './turn-changes.ts'
+
+/** Stable empty match: a claimed-but-empty turn renders null, not a remount. */
+export const EMPTY_CHANGED_FILES: readonly ChangedFile[] = []
+
+/**
+ * Files changed by one Turn data value, merged per path. Same-file entries
+ * collapse into one row with hunks appended in settlement order, so a file
+ * written and then edited in the same turn reads as one entry with combined
+ * +N −M. The Conversation Location index owns turn membership before this
+ * runs, so paths cannot spill across turns.
+ * @param data - the engine-published diff-stat data for one Turn.
+ * @param seq - the closing Assistant seq; later settlements are excluded.
+ * @returns Changed files in first-seen order; empty when the turn wrote nothing.
+ */
+export function changesForClosing(
+  data: Readonly<TurnChangesTurnData> | undefined,
+  seq = Number.POSITIVE_INFINITY,
+): readonly ChangedFile[] {
+  if (data === undefined) return []
+  const files: ChangedFile[] = []
+  const byPath = new Map<string, DiffHunk[]>()
+  for (const entry of data.changed) {
+    if (entry.seq > seq) continue
+    const existing = byPath.get(entry.path)
+    if (existing === undefined) {
+      const diffs: DiffHunk[] = [...entry.diffs]
+      byPath.set(entry.path, diffs)
+      files.push({ path: entry.path, diffs })
+    } else {
+      existing.push(...entry.diffs)
+    }
+  }
+  return files
+}
+
+/**
+ * The claim decision for one Turn's published data at a closing seq: the
+ * changed files when any entry survives the closing-seq filter; a stable
+ * empty match when the turn ran run_code (its edit/write sub-calls are joined
+ * from the chat tool tree later, and an empty claim must still mount the
+ * card); null when there is nothing to show.
+ * @param data - the engine-published diff-stat data for one Turn.
+ * @param seq - the closing Assistant seq; later settlements are excluded.
+ */
+export function claimFor(data: TurnChangesTurnData | undefined, seq: number): readonly ChangedFile[] | null {
+  const files = changesForClosing(data, seq)
+  if (files.length > 0) return files
+  return data?.hasCodeDispatch === true ? EMPTY_CHANGED_FILES : null
+}
 
 /**
  * Collect the successful edit/write dispatch sub-calls of one root block into

@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client/diff-align.ts'
 import { diffStats } from '../src/client/diff-contract.ts'
-import { collectDispatchFiles, mergeChangedFiles } from '../src/client/turn-merge.ts'
+import { claimFor, changesForClosing, collectDispatchFiles, mergeChangedFiles } from '../src/client/turn-merge.ts'
 import { boostHunkWithContext, BOOST_CONTEXT_LINES } from '../src/client/context-boost.ts'
 import { callTimeDiffs, isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
 
@@ -226,5 +226,31 @@ const joinedEditor = collectDispatchFiles(editorRoot, [])
 assert.equal(joinedEditor.length, 1)
 assert.equal(joinedEditor[0].path, 'x.py')
 assert.deepEqual(diffStats(joinedEditor[0].diffs), { added: 1, removed: 1 })
+
+// 15. claimFor / changesForClosing — the turnTail claim decision: settled
+//     entries before the closing seq claim with their files, a run_code turn
+//     with nothing surviving claims with an empty match (the card mounts and
+//     joins from the tool tree), and a plain empty turn declines.
+const dataChanged = { changed: [{ seq: 5, path: 'a.ts', diffs: [{ path: 'a.ts', oldText: 'x', newText: 'y' }] }], hasCodeDispatch: false }
+const dataPtc = { changed: [], hasCodeDispatch: true }
+const dataEmpty = { changed: [], hasCodeDispatch: false }
+assert.deepEqual(claimFor(dataChanged, 100), [{ path: 'a.ts', diffs: [{ path: 'a.ts', oldText: 'x', newText: 'y' }] }])
+assert.equal(claimFor(dataChanged, 4), null)
+assert.deepEqual(claimFor(dataPtc, 100), [])
+assert.equal(claimFor(dataEmpty, 100), null)
+assert.equal(claimFor(undefined, 100), null)
+
+// 15b. changesForClosing merges same-path entries in settlement order and
+//      drops entries settled after the closing seq.
+const mergedTurn = changesForClosing({ changed: [
+  { seq: 1, path: 'f.ts', diffs: [{ path: 'f.ts', oldText: 'a', newText: 'b' }] },
+  { seq: 2, path: 'f.ts', diffs: [{ path: 'f.ts', oldText: 'c', newText: 'd' }] },
+  { seq: 3, path: 'g.ts', diffs: [{ path: 'g.ts', oldText: null, newText: 'z' }] },
+  { seq: 9, path: 'late.ts', diffs: [{ path: 'late.ts', oldText: null, newText: 'late' }] },
+] }, 5)
+assert.equal(mergedTurn.length, 2)
+assert.equal(mergedTurn[0].path, 'f.ts')
+assert.equal(mergedTurn[0].diffs.length, 2)
+assert.equal(mergedTurn[1].path, 'g.ts')
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')
