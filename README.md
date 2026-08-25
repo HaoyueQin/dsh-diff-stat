@@ -40,14 +40,11 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 ## Install
 
 ```sh
-# from GitHub (lib/ is committed — no build permission needed)
-dsh plugin --profile web add github:HaoyueQin/dsh-diff-stat
-
-# or from the GitHub Release tarball
-dsh plugin --profile web add https://github.com/HaoyueQin/dsh-diff-stat/releases/latest/download/dsh-diff-stat.tgz
-
-# from npm (once published)
+# from npm
 dsh plugin --profile web add dsh-diff-stat
+
+# or from GitHub
+dsh plugin --profile web add github:HaoyueQin/dsh-diff-stat
 
 # restart dsh web to take effect
 dsh web
