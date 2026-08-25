@@ -14,6 +14,20 @@ if [ -z "$CHECKOUT" ]; then
     if [ -d "$candidate/packages" ]; then CHECKOUT="$candidate"; break; fi
   done
 fi
+
+# Windows 风格路径 → 当前 bash 可用的 POSIX 路径。npm 在 Windows 上可能把
+# `bash` 解析到 WSL（script-shell 落到 system32 的 cmd → wsl bash），此时
+# D:\... 必须转成 /mnt/d/...；Git Bash 下则转成 /d/...。仅在路径以盘符开头
+# 时转换，POSIX 路径原样通过。
+if [ -n "$CHECKOUT" ] && echo "$CHECKOUT" | grep -qE '^[A-Za-z]:[/\\]'; then
+  drive=$(echo "$CHECKOUT" | cut -c1 | tr 'A-Z' 'a-z')
+  rest=$(echo "$CHECKOUT" | cut -c3- | sed 's#\\#/#g; s#^/##')
+  case "$(uname -s)" in
+    Linux*) CHECKOUT="/mnt/$drive/$rest" ;;   # WSL
+    *)        CHECKOUT="/$drive/$rest" ;;     # Git Bash / MSYS
+  esac
+fi
+
 if [ -z "$CHECKOUT" ] || [ ! -d "$CHECKOUT/packages" ]; then
   echo "build: cannot locate the dsh checkout (set DSH_CHECKOUT)" >&2
   exit 1
