@@ -6,6 +6,8 @@ import assert from 'node:assert/strict'
 import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client/diff-align.ts'
 import { diffStats } from '../src/client/diff-contract.ts'
 import { collectDispatchFiles, mergeChangedFiles } from '../src/client/turn-merge.ts'
+import { boostHunkWithContext, BOOST_CONTEXT_LINES } from '../src/client/context-boost.ts'
+import { isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
 
 const kinds = rows => rows.map(r => r.kind)
 const lines = text => text.split('\n')
@@ -159,5 +161,47 @@ assert.equal(mergedFiles[0].diffs.length, 2)
 assert.equal(mergedFiles[1].path, 'c.ts')
 assert.equal(nativeFiles[0].diffs.length, 1)
 assert.equal(mergeChangedFiles(nativeFiles, []), nativeFiles)
+
+// 13. context-boost — arg hunks gain real file context around the located
+//     fragment; anything unlocatable or edge-flush passes through unchanged.
+assert.ok(BOOST_CONTEXT_LINES === 3)
+// The file lines are the POST-image: the fragment's new side sits in the file
+// as it exists after the change (the only state a reader can fetch).
+const fileLines = lines('f1\nf2\nf3\nNEW\nf4\nf5\nf6\nf7\nf8')
+const argHunk = { path: 'f.ts', oldText: 'OLD', newText: 'NEW' }
+markArgHunks([argHunk])
+assert.ok(isArgHunk(argHunk))
+assert.ok(!isArgHunk({ path: 'f.ts', oldText: 'a', newText: 'b' }))
+
+// 13a. Located: ±3 shared lines wrap both sides; totals stay put (shared
+//      lines count nowhere).
+const boosted = boostHunkWithContext(argHunk, fileLines)
+assert.deepEqual(boosted, {
+  path: 'f.ts',
+  oldText: 'f1\nf2\nf3\nOLD\nf4\nf5\nf6',
+  newText: 'f1\nf2\nf3\nNEW\nf4\nf5\nf6',
+})
+assert.deepEqual(changedLineCounts(lines(boosted.oldText), lines(boosted.newText)), { added: 1, removed: 1 })
+
+// 13b. Fragment no longer in the file (re-edited since) → null.
+assert.equal(boostHunkWithContext({ path: 'f.ts', oldText: 'x', newText: 'gone' }, fileLines), null)
+
+// 13c. Empty post-image (pure deletion) → null.
+assert.equal(boostHunkWithContext({ path: 'f.ts', oldText: 'OLD', newText: '' }, fileLines), null)
+
+// 13d. Insertion (oldText null): the shared rows appear on both sides.
+const boostedIns = boostHunkWithContext({ path: 'f.ts', oldText: null, newText: 'NEW' }, fileLines)
+assert.equal(boostedIns.oldText, 'f1\nf2\nf3\nf4\nf5\nf6')
+assert.equal(boostedIns.newText, 'f1\nf2\nf3\nNEW\nf4\nf5\nf6')
+
+// 13e. File edge: context truncates at the boundary but still boosts; the old
+//      side keeps the original old_string row plus the shared row.
+assert.deepEqual(
+  boostHunkWithContext({ path: 'f.ts', oldText: 'f1', newText: 'F1' }, lines('F1\nf2')),
+  { path: 'f.ts', oldText: 'f1\nf2', newText: 'F1\nf2' },
+)
+
+// 13f. One-line file: no context to add → null (caller keeps the fragment).
+assert.equal(boostHunkWithContext({ path: 'f.ts', oldText: 'only', newText: 'ONLY' }, lines('ONLY')), null)
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')

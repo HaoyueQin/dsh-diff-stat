@@ -16,12 +16,14 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolChatData, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   ToolCallBlock, TurnLocation, UseConversationSession,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { diffStats } from './diff-contract.ts'
+import { diffStats, isArgHunk } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
 import { collectDispatchFiles, mergeChangedFiles } from './turn-merge.ts'
+import { boostEditHunks } from './context-boost.ts'
 import { NS, type DiffStatKey } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
@@ -75,6 +77,9 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
   const [peeked, setPeeked] = useState<ReadonlySet<string>>(() => new Set())
   const [hostReady, setHostReady] = useState(false)
   const [undoState, setUndoState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
+  // Arg-derived hunks (PTC fragments) gain file context when their file is
+  // expanded for review; applied wire hunks already carry the host's ±3.
+  const [boosted, setBoosted] = useState<ReadonlyMap<string, readonly DiffHunk[]>>(() => new Map())
 
   // The PTC half: join this Turn's edit/write dispatch sub-calls from the
   // stock chat tool tree (the accumulator cannot route them — dispatch
@@ -92,6 +97,29 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
   }) ?? EMPTY_FILES
   const allFiles = useMemo(() => mergeChangedFiles(matched, dispatchFiles), [matched, dispatchFiles])
   const total = useMemo(() => totals(allFiles), [allFiles])
+  const cwd = useMemo(() => getCwd?.(sessionId), [getCwd, sessionId])
+
+  // Boost newly reviewed files whose hunks are bare arg fragments; the host
+  // read is LRU-cached and best-effort, and unlocatable fragments (since
+  // re-edited, truncated reads) simply keep their bare rendering.
+  useEffect(() => {
+    if (revealed.size === 0) return
+    let alive = true
+    void (async () => {
+      for (const path of revealed) {
+        const file = allFiles.find(candidate => candidate.path === path)
+        if (file === undefined || !file.diffs.some(isArgHunk)) continue
+        const next = await boostEditHunks(file.diffs, path, cwd)
+        if (!alive) return
+        setBoosted(prev => {
+          const map = new Map(prev)
+          map.set(path, next)
+          return map
+        })
+      }
+    })()
+    return () => { alive = false }
+  }, [revealed, allFiles, cwd])
 
   // Host half probe: the dependent actions (撤销/内嵌查看/定向打开) stay
   // hidden while the server route is absent.
@@ -100,8 +128,6 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
     void hostAvailable().then(available => { if (alive) setHostReady(available) })
     return () => { alive = false }
   }, [])
-
-  const cwd = useMemo(() => getCwd?.(sessionId), [getCwd, sessionId])
 
   const togglePeeked = useCallback((path: string) => {
     setPeeked(prev => {
@@ -265,7 +291,7 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
                 </div>
                 {revealedFile && (
                   <div className={css.diffWrap}>
-                    <DiffWindow diffs={file.diffs} maxHeight={320} />
+                    <DiffWindow diffs={boosted.get(file.path) ?? file.diffs} maxHeight={320} />
                   </div>
                 )}
                 {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} onClose={() => { togglePeeked(file.path) }} />}

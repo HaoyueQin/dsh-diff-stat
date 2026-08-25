@@ -8,7 +8,7 @@
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
-import { callTimeDiffs } from './diff-contract.ts'
+import { callTimeDiffs, markArgHunks } from './diff-contract.ts'
 import type { ChangedFile } from './turn-changes.ts'
 
 /**
@@ -33,6 +33,7 @@ export function collectDispatchFiles(root: ToolCallBlock, into: ChangedFile[]): 
         if (!sub.isError && (name === 'edit' || name === 'write')) {
           const hunks = callTimeDiffs(name, sub.call?.argsRaw ?? '')
           if (hunks !== null) {
+            markArgHunks(hunks)
             for (const hunk of hunks) {
               const existing = byPath.get(hunk.path)
               if (existing === undefined) {

@@ -34,6 +34,27 @@ export interface DiffCardModel {
   card: { diffs: DiffHunk[] }
 }
 
+/**
+ * Arg-derived hunks (the PTC dispatch fallback and running estimates), marked
+ * at construction so the context booster can tell them apart from applied
+ * wire hunks — the host already bakes ±3 context lines into the latter, while
+ * an arg fragment is the bare old_string → new_string slice with no file
+ * context at all. Object identity rides the whole render path (hunks are
+ * never cloned), so a module-side WeakSet needs no interface change and
+ * garbage-collects with its hunks.
+ */
+const argHunks = new WeakSet<DiffHunk>()
+
+/** Mark every hunk in the list as arg-derived (see {@link isArgHunk}). */
+export function markArgHunks(diffs: readonly DiffHunk[]): void {
+  for (const hunk of diffs) argHunks.add(hunk)
+}
+
+/** Whether this hunk came from the argument fallback (no file context). */
+export function isArgHunk(hunk: DiffHunk): boolean {
+  return argHunks.has(hunk)
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotMap {
     /** Keyed atomic Tool call view (declared by the stock ui-tool chat tree). */
@@ -173,6 +194,7 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
     // A code-dispatch sub-call has no call view at all; its args still carry
     // the intended change, so the call-time fallback keeps the row a diff card.
     const fallback = callTimeDiffs(toolName, block.argsRaw)
+    if (fallback !== null) markArgHunks(fallback)
     return fallback === null ? null : { card: { diffs: fallback } }
   }
   // Settled: the result view's applied hunks replace the call-time diff.
@@ -185,6 +207,7 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   // exactly like the stock row (which surfaces the model-facing error text).
   if (block.isError) return null
   const fallback = callTimeDiffs(toolName, block.call?.argsRaw ?? '')
+  if (fallback !== null) markArgHunks(fallback)
   return fallback === null ? null : { card: { diffs: fallback } }
 }
 /** A wire tool view carrying an optional diff render intent. */
@@ -215,5 +238,7 @@ export function mutationHunks(
     ? narrowDiffs(callView.diffs)
     : null
   if (call !== null) return call
-  return callTimeDiffs(toolName, argsRaw)
+  const args = callTimeDiffs(toolName, argsRaw)
+  if (args !== null) markArgHunks(args)
+  return args
 }
