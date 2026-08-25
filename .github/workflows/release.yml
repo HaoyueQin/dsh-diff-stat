@@ -78,10 +78,15 @@ jobs:
         run: |
           mkdir -p dist
           npm pack --pack-destination dist
+          # Versioned asset plus a fixed-name copy: the marketplace `tarball:`
+          # field points at releases/latest/download/<fixed>.tgz, which must
+          # keep resolving to the newest build across versions.
+          cp "dist/$(ls dist | head -1)" dist/dsh-diff-stat.tgz
           echo "TARBALL=$(ls dist/*.tgz | head -1)" >> "$GITHUB_ENV"
+          echo "FIXED_TARBALL=dist/dsh-diff-stat.tgz" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         working-directory: plugin
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME" "$TARBALL"
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME" "$TARBALL" "$FIXED_TARBALL"
