@@ -44,6 +44,18 @@
 	background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, transparent);
 }
 
+/* Under the backdrop plugin's frosted glass the window's pale annotation
+   tints sit on a translucent glass base, so push the +/− line fills up a
+   touch to stay legible against the wallpaper. Glass off: the body
+   attribute (and therefore these rules) is absent — no visual change. */
+:global(body[data-dsh-bg-glass]) [data-diff-window] .add {
+	background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 13%, transparent);
+}
+
+:global(body[data-dsh-bg-glass]) [data-diff-window] .del {
+	background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 13%, transparent);
+}
+
 .footer {
 	padding: 3px 8px;
 	border-top: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));

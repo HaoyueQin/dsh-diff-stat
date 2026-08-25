@@ -197,7 +197,7 @@ export function MutationRow({ toolName, block, cwd, openFile, inspect }: Mutatio
             : (
               <>
                 {(model.body !== null || outputText !== null) && (
-                  <div className={rowCss.ioCard}>
+                  <div className={rowCss.ioCard} data-diff-stat-io="">
                     {model.body !== null && (
                       <div className={rowCss.ioSection}>
                         <span className={rowCss.ioLabel}>IN</span>

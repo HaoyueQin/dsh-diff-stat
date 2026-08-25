@@ -54,12 +54,13 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
   })
 
   // Optional frosted-glass integration: when deepseek-harness-background is
-  // installed, its diff window and file preview join the unified glass recipe
-  // (token mode — both paint with --dsw-alias-markdown-code-block, whose fill
-  // already follows the panel-opacity slider). The subscription covers both
-  // arrival orders AND hot reload: a ready event after a new bridge publication
-  // re-registers against the live api. When the bridge never appears the
-  // ordinary UI stays exactly as-is.
+  // installed, every plugin surface joins the unified glass recipe — the diff
+  // window, file preview and row IN/OUT card (all paint with
+  // --dsw-alias-markdown-code-block, so they register in token mode), plus the
+  // per-turn summary card (own literal tint, so it registers in fill mode).
+  // The subscription covers both arrival orders AND hot reload: a ready event
+  // after a new bridge publication re-registers against the live api. When the
+  // bridge never appears the ordinary UI stays exactly as-is.
   ctx.effect(() => {
     let unregister: (() => void) | undefined
     const unsubscribe = subscribeGlassReady((glass) => {
@@ -69,11 +70,20 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
       // superseded bridge (its registry is already gone) and calling it is a
       // safe no-op, while the new registration lands on the live registry.
       unregister?.()
-      unregister = glass.register({
+      const offToken = glass.register({
         plugin: 'dsh-diff-stat',
-        selectors: ['[data-diff-window]', '[data-diff-stat-peek]'],
+        selectors: ['[data-diff-window]', '[data-diff-stat-peek]', '[data-diff-stat-io]'],
         mode: 'token',
       })
+      const offFill = glass.register({
+        plugin: 'dsh-diff-stat',
+        selectors: ['[data-diff-stat-card]'],
+        mode: 'fill',
+      })
+      unregister = () => {
+        offToken()
+        offFill()
+      }
     })
     return () => {
       unregister?.()
