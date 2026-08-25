@@ -20,6 +20,7 @@
 - **撤销**：一键把本轮改动恢复到轮前状态——hunk 链倒序唯一性回剥、本轮新建文件删除、文件漂移拒绝写入、原子写
 - **内嵌查看**：点「打开」直接在条目下方展开限高文件内容窗口（16 行折叠，与 stock DiffBlock 同款交互）；「▾」菜单保留全部打开方式
 - **上下文折叠**：展开 diff 前 hunk 两侧做行级 LCS 对齐——共同行作变更块 ±3 行上下文，更远未变更区间折叠为 ⋯；徽标与页脚统计保持全量口径
+- **毛玻璃（可选）**：安装 [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) 后，diff 窗口与文件预览自动并入其共享玻璃配方（token 模式）；未安装时保持现有不透明外观——优雅降级、零依赖
 - **打开系**：系统打开（本体 `openFile`）+ 资源管理器定位 + VS Code 打开 + 复制绝对/相对路径
 - **中英文**：跟随 Web 界面语言（locale 服务）
 
@@ -28,6 +29,7 @@
 - **行内徽标**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write` 键，priority −1 阴影 shipped 行；diff 数据按「resultView → callView → 参数兜底」三级提取（顺序即合同：窗口截断丢 callView 时仍可从 resultView 渲染）
 - **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start` / `tool/call` / `tool/result(append)` / `tool/code-dispatch`）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染；结构遵循官方 `ui-deliverables` 模式
 - **host 半**（可选）：同源前缀路由提供围栏 API——realpath 包含性（解析前后双查）、符号链接拒绝、UTF-8 回环校验、512 KiB 读取截断、原子写；host 半缺席时相关按钮自动隐藏
+- **毛玻璃桥（可选）**：零依赖消费 background 插件的 `window.__DSH_BACKGROUND_GLASS__` 注册表；`[data-diff-window]` 与 `[data-diff-stat-peek]` 以 token 模式注册，桥不存在时普通界面原样保留
 
 ## 安装
 
@@ -56,4 +58,4 @@ npm run typecheck                       # 双端 tsc
 
 ## License
 
-BSD-3-Clause
+MIT

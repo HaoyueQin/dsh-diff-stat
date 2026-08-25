@@ -20,6 +20,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 - **Undo**: reverts the turn's files to their pre-turn state — reverse uniqueness-checked hunk peeling, deletes files the turn created, rejects drifted files before writing, atomic commits
 - **Inline view**: clicking "open" expands a height-capped file content window below the row (16-line collapse, the stock DiffBlock interaction); the "▾" menu keeps every open-with route
 - **Context folding**: before rendering, each hunk's sides are LCS-aligned — shared lines become ±3 lines of context around the change and untouched runs fold into ⋯; badge and footer totals stay full-scope
+- **Frosted glass (optional)**: when [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) is installed, the diff window and file preview join its shared glass recipe (token mode). Without it they keep the stock opaque look — graceful degradation, zero dependencies
 - **Open with**: system open (the stock `openFile`), reveal in Explorer, open in VS Code, copy absolute/relative path
 - **zh / en**: copy follows the Web UI language (locale service)
 
@@ -28,6 +29,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 - **Inline badges**: register the `edit`/`write` keys of the `tool.call.toolview` keyed slot at priority −1 (shadows the shipped rows); diff data follows the authoritative chain resultView → callView → argument fallback (a truncated window that dropped the call head still renders from the result view)
 - **Turn summary card**: a `ConversationNodeDefinition` accumulator (`turn/start` / `tool/call` / `tool/result(append)` / `tool/code-dispatch`) publishes Turn data; the `conversation.chat.turnTail` chain claims rendering — modeled on the official `ui-deliverables` plugin
 - **Host half (optional)**: a same-origin prefix route serves a fenced API — realpath containment (checked before and after resolution), symlink rejection, UTF-8 round-trip validation, 512 KiB read cap, atomic writes. When the host half is absent the dependent actions hide themselves
+- **Frosted glass bridge (optional)**: a zero-dependency consumer of the background plugin's `window.__DSH_BACKGROUND_GLASS__` registry. `[data-diff-window]` and `[data-diff-stat-peek]` register in token mode; the bridge never appearing leaves the ordinary UI untouched
 
 ## Install
 
@@ -56,4 +58,4 @@ npm run typecheck                       # both halves via tsc
 
 ## License
 
-BSD-3-Clause
+MIT

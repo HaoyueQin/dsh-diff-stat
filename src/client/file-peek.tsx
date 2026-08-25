@@ -62,7 +62,7 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
 
   if (state.kind === 'loading') {
     return (
-      <div className={css.peek}>
+      <div className={css.peek} data-diff-stat-peek="">
         <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
         <div className={css.note}>{t('peek.loading')}</div>
       </div>
@@ -70,7 +70,7 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
   }
   if (state.kind === 'error') {
     return (
-      <div className={css.peek}>
+      <div className={css.peek} data-diff-stat-peek="">
         <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
         <div className={css.note}>{t('peek.readFailed')}：{state.message}</div>
       </div>
@@ -78,7 +78,7 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
   }
   if (state.kind === 'binary') {
     return (
-      <div className={css.peek}>
+      <div className={css.peek} data-diff-stat-peek="">
         <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
         <div className={css.note}>{t('peek.binary', { size: state.size })}</div>
       </div>
