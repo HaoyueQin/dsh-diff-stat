@@ -22,7 +22,7 @@ jobs:
           repository: deepseek-ai/deepseek-harness
           # Pinned to the same rc.2-era commit the plugin targets; the harness
           # moves, and a pinned build keeps CI reproducible.
-          ref: b150a551b8
+          ref: b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
           path: dsh
           fetch-depth: 1
 
