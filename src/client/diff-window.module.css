@@ -10,12 +10,12 @@
 	padding: 4px 0;
 	white-space: pre;
 	font: var(--dsw-font-markdown-code-block, var(--dsw-font-xs-13));
-	min-width: 100%;
-	width: max-content;
 	min-height: 0;
 }
 
 .line {
+	width: max-content;
+	min-width: 100%;
 	padding: 0 8px;
 	min-height: var(--dsl-diff-line-height, 18px);
 	color: var(--dsw-alias-label-primary);
