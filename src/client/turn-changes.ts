@@ -6,7 +6,7 @@
  * never from the closing prose. Structure follows the official ui-deliverables
  * turn accumulator (publishes Turn data, renders no view Node of its own).
  */
-import { isAppendSurfaceEvent, type ConversationNodeDefinition } from '@deepseek-ai/dsh-client-runtime/client'
+import { isAppendSurfaceEvent, type ConversationMatch, type ConversationNodeDefinition } from '@deepseek-ai/dsh-client-runtime/client'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -133,6 +133,101 @@ export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedF
   return result
 }
 
+/** The state a matched turn/start begins with. */
+function startState(match: ConversationMatch): TurnChangesState {
+  if (match.event.type !== 'turn/start') throw new Error('diff-stat changes start requires turn/start')
+  return { turn: match.event.data.turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
+}
+
+/** One update folded into the state — the engine's update path and the
+ *  window fold below share this single function, so both derive identical data. */
+function applyUpdateState(state: TurnChangesState, match: ConversationMatch): TurnChangesState {
+  if (match.event.type === 'tool/call') {
+    if (typeof match.event.data.callId !== 'string' || match.event.data.callId === '') {
+      return state
+    }
+    const calls = new Map(state.calls)
+    calls.set(match.event.data.callId, {
+      name: String(match.event.data.name ?? ''),
+      argsRaw: String(match.event.data.arguments ?? ''),
+      view: match.view?.for === 'call' ? match.view.view : null,
+    })
+    return {
+      ...state,
+      calls,
+      hasCodeDispatch: state.hasCodeDispatch || match.event.data.name === 'run_code',
+    }
+  }
+  if (match.event.type === 'tool/result') {
+    const result = match.event.data.message.content[0]
+    if (result === undefined || result === null) return state
+    if (result.isError === true) return state
+    const callId = match.event.data.message.source.callId
+    if (typeof callId !== 'string' || callId === '') return state
+    const call = state.calls.get(callId)
+    const resultView = match.view?.for === 'result' ? match.view.view : null
+    const hunks = settledHunks(call, resultView)
+    if (hunks === null || hunks.length === 0) return state
+    // Same call settling twice keeps its first settlement; a later edit to
+    // the same file is a distinct call and appends naturally.
+    const path = hunks[0]?.path
+    if (path === undefined) return state
+    return {
+      ...state,
+      changed: [...state.changed, { seq: match.event.seq, path, diffs: hunks }],
+    }
+  }
+  const dispatch = codeDispatchData(match.event)
+  if (dispatch !== null) {
+    const data = dispatch
+    const hunks = dispatchHunks(data)
+    if (hunks === null || hunks.length === 0) return state
+    // Dedup key is the root+sub pair: replays and duplicate dispatch
+    // records must not double-count a file, and equal sub ids under
+    // different roots stay distinct.
+    const dedupeKey = String(data['rootCallId']) + '\u0000' + String(data['subCallId'])
+    if (state.subCalls.has(dedupeKey)) return state
+    const subCalls = new Set(state.subCalls)
+    subCalls.add(dedupeKey)
+    const path = hunks[0]?.path
+    if (path === undefined) return state
+    return {
+      ...state,
+      subCalls,
+      changed: [...state.changed, { seq: match.event.seq, path, diffs: hunks }],
+    }
+  }
+  return state
+}
+
+/**
+ * Fold one context's matches into its turn data. The engine only runs a
+ * definition's start for events inside the loaded history window, and a
+ * session opened mid-turn (history pagination loads the tail page first)
+ * reaches update matches with no start and therefore no state; folding the
+ * matches directly reconstructs the same data from whatever the window holds
+ * (best effort, exactly like the stock produced-files accumulator: a call
+ * whose tool/call settled outside the window cannot contribute, and older
+ * pages arriving later enlarge the fold).
+ */
+function foldMatches(matches: readonly ConversationMatch[]): TurnChangesState | undefined {
+  let state: TurnChangesState | undefined
+  for (const match of matches) {
+    if (match.role === 'start') {
+      state = startState(match)
+      continue
+    }
+    if (state === undefined) {
+      // Window-start match may be any event type; only turn coordinate rides it.
+      const turn = (match.event.data as { turn?: unknown }).turn
+      if (typeof turn !== 'number') continue
+      state = { turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
+    }
+    state = applyUpdateState(state, match)
+  }
+  return state
+}
+
 /** Turn-local successful mutation accumulator; it publishes no view Node. */
 export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState> = {
   // The assembler requires buildLocationData's key to equal this kind — both
@@ -154,76 +249,25 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
     }
     return null
   },
-  start: (_context, match) => {
-    if (match.event.type !== 'turn/start') throw new Error('diff-stat changes start requires turn/start')
-    return { turn: match.event.data.turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
+  start: (_context, match) => startState(match),
+  update: (context, match) => applyUpdateState(context.state, match),
+  // Published from the folded matches, not the incremental state: a session
+  // opened on a tail page reaches this Definition with update matches only
+  // (its turn/start is outside the loaded window), and the engine never runs
+  // start/update for those — folding the window's matches recovers the same
+  // data and keeps the card visible for turns the window truncates.
+  buildLocationData: (context, scope) => {
+    if (scope !== 'turn') return null
+    const state = foldMatches(context.matches)
+    return state === undefined
+      ? null
+      : {
+        kind: 'turn',
+        turn: state.turn,
+        key: 'diff-stat',
+        value: { changed: state.changed, hasCodeDispatch: state.hasCodeDispatch },
+      }
   },
-  update: (context, match) => {
-    if (match.event.type === 'tool/call') {
-      if (typeof match.event.data.callId !== 'string' || match.event.data.callId === '') {
-        return context.state
-      }
-      const calls = new Map(context.state.calls)
-      calls.set(match.event.data.callId, {
-        name: String(match.event.data.name ?? ''),
-        argsRaw: String(match.event.data.arguments ?? ''),
-        view: match.view?.for === 'call' ? match.view.view : null,
-      })
-      return {
-        ...context.state,
-        calls,
-        hasCodeDispatch: context.state.hasCodeDispatch || match.event.data.name === 'run_code',
-      }
-    }
-    if (match.event.type === 'tool/result') {
-      const result = match.event.data.message.content[0]
-      if (result === undefined || result === null) return context.state
-      if (result.isError === true) return context.state
-      const callId = match.event.data.message.source.callId
-      if (typeof callId !== 'string' || callId === '') return context.state
-      const call = context.state.calls.get(callId)
-      const resultView = match.view?.for === 'result' ? match.view.view : null
-      const hunks = settledHunks(call, resultView)
-      if (hunks === null || hunks.length === 0) return context.state
-      // Same call settling twice keeps its first settlement; a later edit to
-      // the same file is a distinct call and appends naturally.
-      const path = hunks[0]?.path
-      if (path === undefined) return context.state
-      return {
-        ...context.state,
-        changed: [...context.state.changed, { seq: match.event.seq, path, diffs: hunks }],
-      }
-    }
-    const dispatch = codeDispatchData(match.event)
-    if (dispatch !== null) {
-      const data = dispatch
-      const hunks = dispatchHunks(data)
-      if (hunks === null || hunks.length === 0) return context.state
-      // Dedup key is the root+sub pair: replays and duplicate dispatch
-      // records must not double-count a file, and equal sub ids under
-      // different roots stay distinct.
-      const dedupeKey = String(data['rootCallId']) + '\u0000' + String(data['subCallId'])
-      if (context.state.subCalls.has(dedupeKey)) return context.state
-      const subCalls = new Set(context.state.subCalls)
-      subCalls.add(dedupeKey)
-      const path = hunks[0]?.path
-      if (path === undefined) return context.state
-      return {
-        ...context.state,
-        subCalls,
-        changed: [...context.state.changed, { seq: match.event.seq, path, diffs: hunks }],
-      }
-    }
-    return context.state
-  },
-  buildLocationData: (context, scope) => scope !== 'turn' || context.state === undefined
-    ? null
-    : {
-      kind: 'turn',
-      turn: context.state.turn,
-      key: 'diff-stat',
-      value: { changed: context.state.changed, hasCodeDispatch: context.state.hasCodeDispatch },
-    },
 }
 
 /** Re-exported for the card: parse args once for the relative-path display. */
