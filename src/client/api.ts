@@ -6,13 +6,27 @@
  */
 const BASE = '/dsh-diff-stat/api'
 
+/** Abort a hung host request after this long (never leave a pane loading forever). */
+const REQUEST_TIMEOUT_MS = 10_000
+
+/** fetch with a hard abort; rejects on timeout or network failure. */
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    return await fetch(input, { ...init, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
  * POST one action to the fenced API.
  * @returns the parsed payload, or null when the host half is absent/unreachable.
  */
 export async function hostCall<T>(action: string, body: unknown): Promise<T | null> {
   try {
-    const res = await fetch(BASE + '/' + action, {
+    const res = await fetchWithTimeout(BASE + '/' + action, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -34,7 +48,7 @@ let probe: Promise<boolean> | null = null
 export function hostAvailable(): Promise<boolean> {
   probe ??= (async () => {
     try {
-      const res = await fetch(BASE + '/ping')
+      const res = await fetchWithTimeout(BASE + '/ping')
       return res.ok
     } catch {
       return false

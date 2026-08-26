@@ -46,41 +46,11 @@ const GLASS_GLOBAL = '__DSH_BACKGROUND_GLASS__' as const
 const GLASS_EVENT = 'dsh-background-glass:ready' as const
 
 /**
- * Resolve the background plugin's glass api when it becomes available.
- *
- * DSH loads client bundles in no guaranteed order, so both arrival paths are
- * covered: poll the global first, then wait for the ready event. When the
- * bridge never appears (background plugin not installed, or a timeout) the
- * promise resolves `null` and the caller keeps its ordinary UI untouched.
- *
- * @param timeoutMs - how long to wait for the ready event (default 10s).
- * @returns the bridge api, or `null` when unavailable.
- */
-export function whenGlassReady(timeoutMs = 10_000): Promise<BackgroundGlassApi | null> {
-  const existing = (window as unknown as Record<string, unknown>)[GLASS_GLOBAL] as BackgroundGlassApi | undefined
-  if (existing !== undefined) return Promise.resolve(existing)
-  return new Promise((resolve) => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const onReady = (event: Event): void => {
-      if (timer !== undefined) clearTimeout(timer)
-      window.removeEventListener(GLASS_EVENT, onReady)
-      resolve((event as CustomEvent<BackgroundGlassApi>).detail)
-    }
-    timer = setTimeout(() => {
-      window.removeEventListener(GLASS_EVENT, onReady)
-      resolve(null)
-    }, timeoutMs)
-    window.addEventListener(GLASS_EVENT, onReady)
-  })
-}
-
-/**
  * Subscribe to every glass-bridge publication, including hot reloads.
  *
- * Unlike {@link whenGlassReady} (which settles once), this keeps the ready
- * listener attached for the whole fiber: if the background plugin hot-reloads
- * and re-publishes the bridge, the caller can re-register its surfaces against
- * the new api. Returns the unsubscriber for effect cleanup.
+ * The listener keeps watching for the whole fiber: if the background plugin
+ * hot-reloads and re-publishes the bridge, the caller can re-register its
+ * surfaces against the new api. Returns the unsubscriber for effect cleanup.
  *
  * @param listener - invoked immediately if the bridge is already published,
  *   then again after every `dsh-background-glass:ready` event.

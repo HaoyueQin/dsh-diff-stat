@@ -63,10 +63,24 @@ interface UndoFile {
 
 /** A resolved, fence-checked file: real path, bytes, and validated text. */
 interface ResolvedFile {
+  /** The request-side path (pre-realpath), kept for swap re-verification. */
+  candidate: string
   filename: string
   mode: number
   bytes: Buffer
   text: string
+}
+
+/**
+ * Re-verify that a request-side path still resolves to the same target file.
+ * The lstat/realpath/readFile sequence is otherwise a check-then-use race: a
+ * swap to a symlink between the checks would make the follow-up read or write
+ * land elsewhere. Resolves to identity, throws on drift (drift = reject, and
+ * already-read bytes are simply never returned).
+ */
+async function assertSamePath(candidate: string, filename: string): Promise<void> {
+  const now = await realpath(candidate)
+  if (now !== filename) throw new Error('file changed while being accessed (link swap)')
 }
 
 /** Path containment: candidate is root itself or below it (no .. escape). */
@@ -92,9 +106,10 @@ async function resolveFile(cwd: string, requestedPath: string): Promise<Resolved
   const filename = await realpath(candidate)
   if (!inside(root, filename)) throw new Error('resolved path is outside the session workspace')
   const bytes = await readFile(filename)
+  await assertSamePath(candidate, filename)
   const text = bytes.toString('utf8')
   if (!Buffer.from(text, 'utf8').equals(bytes)) throw new Error('file is not valid UTF-8 text')
-  return { filename, mode: linkStat.mode & 0o777, bytes, text }
+  return { candidate, filename, mode: linkStat.mode & 0o777, bytes, text }
 }
 
 /**
@@ -142,6 +157,9 @@ async function undoFile(cwd: string, file: UndoFile): Promise<{ path: string; ok
         text = next
       }
     }
+    // Re-verify before the destructive step: the file may have been swapped
+    // to a link since resolveFile's read-time check.
+    await assertSamePath(resolved.candidate, resolved.filename)
     if (created) {
       await unlink(resolved.filename)
       return { path: file.path, ok: true, deleted: true }
@@ -277,9 +295,13 @@ export function apply(ctx: Context): void {
             return
           }
           const truncated = resolved.bytes.length > READ_CAP
-          const content = truncated
+          const raw = truncated
             ? utf8SafeSlice(resolved.bytes.subarray(0, READ_CAP)).toString('utf8')
             : resolved.text
+          // Display layer only: strip a leading UTF-8 BOM so the first diff
+          // line does not carry an invisible U+FEFF. Undo paths keep the
+          // original text and therefore the BOM byte-for-byte.
+          const content = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw
           respond(res, 200, { kind: 'text', content, truncated, size: resolved.bytes.length })
           return
         }

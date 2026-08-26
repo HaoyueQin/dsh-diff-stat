@@ -207,7 +207,7 @@ export function MutationRow({ toolName, block, cwd, openFile, inspect }: Mutatio
               <>
                 <span className={rowCss.sep} aria-hidden />
                 {fileLink ? (
-                  <button type="button" className={clsx(rowCss.fileLink, badgeCss.linkFit)} onClick={openFilePath} onKeyDown={fileLinkKeyDown}>
+                  <button type="button" className={clsx(rowCss.fileLink, badgeCss.linkFit)} title={summaryText} onClick={openFilePath} onKeyDown={fileLinkKeyDown}>
                     {summaryText}
                   </button>
                 ) : (

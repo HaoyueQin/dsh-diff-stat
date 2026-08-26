@@ -35,9 +35,12 @@ jobs:
           pnpm pack --pack-destination dist
           # Versioned asset plus a fixed-name copy: the marketplace tarball:
           # field points at releases/latest/download/<fixed>.tgz, which must
-          # keep resolving to the newest build across versions.
-          cp "dist/$(ls dist | head -1)" dist/dsh-diff-stat.tgz
-          echo "TARBALL=$(ls dist/*.tgz | head -1)" >> "$GITHUB_ENV"
+          # keep resolving to the newest build across versions. Select the
+          # versioned file by name shape (not by unsorted directory order).
+          TARBALL="dist/$(ls dist | grep -E '^dsh-diff-stat-[0-9].*\.tgz$' | head -1)"
+          if [ -z "$TARBALL" ]; then echo "versioned tarball not found"; exit 1; fi
+          cp "$TARBALL" dist/dsh-diff-stat.tgz
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
           echo "FIXED_TARBALL=dist/dsh-diff-stat.tgz" >> "$GITHUB_ENV"
       - name: Create GitHub Release
         env:

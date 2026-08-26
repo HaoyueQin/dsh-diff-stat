@@ -126,6 +126,13 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
   }, [snapshot, turn])
   const allFiles = useMemo(() => mergeChangedFiles(matched, dispatchFiles), [matched, dispatchFiles])
   const total = useMemo(() => totals(allFiles), [allFiles])
+  // Per-file stats off the per-render path: the file list is stable per
+  // allFiles, so one DP pass each, memoized (identity-mirrors mutation-row).
+  const statsByPath = useMemo(() => {
+    const map = new Map<string, { added: number; removed: number }>()
+    for (const file of allFiles) map.set(file.path, diffStats(file.diffs))
+    return map
+  }, [allFiles])
   const cwd = useMemo(() => getCwd?.(sessionId), [getCwd, sessionId])
 
   // Boost newly reviewed files whose hunks are bare arg fragments; the host
@@ -267,7 +274,7 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
           {allFiles.map(file => {
             const name = basename(file.path)
             const dir = dirname(file.path)
-            const stats = diffStats(file.diffs)
+            const stats = statsByPath.get(file.path) ?? { added: 0, removed: 0 }
             const revealedFile = revealed.has(file.path)
             return (
               <div key={file.path} data-diff-stat-file={file.path}>

@@ -204,6 +204,18 @@ assert.deepEqual(
 // 13f. One-line file: no context to add → null (caller keeps the fragment).
 assert.equal(boostHunkWithContext({ path: 'f.ts', oldText: 'only', newText: 'ONLY' }, lines('ONLY')), null)
 
+// 13g. callTimeDiffs write accepts the 'path' argument key as a fallback
+//      (rowModel parity): the wire write schema carries file_path, but a
+//      variant passing path must still derive a diff.
+assert.deepEqual(
+  callTimeDiffs('write', JSON.stringify({ path: 'p.md', content: 'abc' })),
+  [{ path: 'p.md', oldText: null, newText: 'abc' }],
+)
+assert.deepEqual(
+  callTimeDiffs('write', JSON.stringify({ file_path: 'q.md', content: 'def' })),
+  [{ path: 'q.md', oldText: null, newText: 'def' }],
+)
+
 // 14. str_replace_editor — the minimal preset's editor maps its commands to
 //     the same hunk shapes over path/old_str/new_str/file_text; view is read-only.
 const created = callTimeDiffs('str_replace_editor', JSON.stringify({ command: 'create', path: 'n.md', file_text: '# hi\n' }))

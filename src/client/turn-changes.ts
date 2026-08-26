@@ -71,7 +71,9 @@ function settledHunks(
  * metadata). Returns null for errored, malformed, or non-mutation dispatches.
  */
 function dispatchHunks(data: Record<string, unknown>): DiffHunk[] | null {
-  if (data.isError !== false) return null
+  // Official dispatch semantics (ui-conversation childResult): only an
+  // explicit true counts as errored; a missing flag is treated as success.
+  if (data.isError === true) return null
   if (typeof data.rootCallId !== 'string' || data.rootCallId === '') return null
   if (typeof data.subCallId !== 'string' || data.subCallId === '') return null
   if (typeof data.name !== 'string' || typeof data.arguments !== 'string') return null
@@ -175,6 +177,7 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
     }
     if (match.event.type === 'tool/result') {
       const result = match.event.data.message.content[0]
+      if (result === undefined || result === null) return context.state
       if (result.isError === true) return context.state
       const callId = match.event.data.message.source.callId
       if (typeof callId !== 'string' || callId === '') return context.state
@@ -196,12 +199,13 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
       const data = dispatch
       const hunks = dispatchHunks(data)
       if (hunks === null || hunks.length === 0) return context.state
-      const subCallId = String(data['subCallId'])
-      // Sub-call dedup (rootCallId+subCallId): replays and duplicate dispatch
-      // records must not double-count a file.
-      if (context.state.subCalls.has(subCallId)) return context.state
+      // Dedup key is the root+sub pair: replays and duplicate dispatch
+      // records must not double-count a file, and equal sub ids under
+      // different roots stay distinct.
+      const dedupeKey = String(data['rootCallId']) + '\u0000' + String(data['subCallId'])
+      if (context.state.subCalls.has(dedupeKey)) return context.state
       const subCalls = new Set(context.state.subCalls)
-      subCalls.add(subCallId)
+      subCalls.add(dedupeKey)
       const path = hunks[0]?.path
       if (path === undefined) return context.state
       return {

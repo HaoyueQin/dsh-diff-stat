@@ -58,7 +58,7 @@ function FileSilhouette({ color }: { color: string }) {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M4 1.5h5.2L12.5 4.8v9.7a1 1 0 0 1-1 1h-7.5a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" fill={color} />
-      <path d="M9.2 1.5v3.3h3.3" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1" />
+      <path d="M9.2 1.5v3.3h3.3" fill="none" stroke="currentColor" strokeOpacity="0.35" strokeWidth="1" />
     </svg>
   )
 }

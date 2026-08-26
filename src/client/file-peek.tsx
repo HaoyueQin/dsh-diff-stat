@@ -48,11 +48,11 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
       const result = await hostCall<{ kind: string; content?: string; truncated?: boolean; size?: number; error?: string }>('files.read', { cwd, path })
       if (!alive) return
       if (result === null) {
-        setState({ kind: 'error', message: 'host API 不可用' })
+        setState({ kind: 'error', message: t('peek.hostUnavailable') })
       } else if (result.kind === 'binary') {
         setState({ kind: 'binary', size: result.size ?? 0 })
       } else if (typeof result.content !== 'string') {
-        setState({ kind: 'error', message: result.error ?? '读取失败' })
+        setState({ kind: 'error', message: result.error ?? t('peek.readFailed') })
       } else {
         setState({ kind: 'text', content: result.content, truncated: result.truncated === true, size: result.size ?? 0 })
       }

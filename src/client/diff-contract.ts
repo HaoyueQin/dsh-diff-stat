@@ -169,7 +169,8 @@ export function callTimeDiffs(toolName: string, argsRaw: string): DiffHunk[] | n
   const args = parseArgs(argsRaw)
   if (args === undefined) return null
   if (toolName === 'write') {
-    const path = stringArg(args, 'file_path')
+    // Same key fallback rowModel applies ('path' vs 'file_path').
+    const path = stringArg(args, 'file_path') ?? stringArg(args, 'path')
     const content = stringArg(args, 'content')
     if (path === undefined || content === undefined) return null
     return [{ path, oldText: null, newText: content }]
