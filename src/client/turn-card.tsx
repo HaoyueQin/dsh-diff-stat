@@ -70,7 +70,14 @@ function totals(files: readonly ChangedFile[]): { added: number; removed: number
  * The turn-tail summary card.
  * @param props - matched files from the slot select, plus the opener and cwd reader.
  */
-export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSession, t }: TurnCardProps) {
+export function TurnCard(props: TurnCardProps) {
+  const { matched, turn, sessionId, openFile, getCwd, t } = props
+  // The session-reading standard prop changed across kernel generations:
+  // 0.1.1-rc.2 passes `useSession` (selector over the whole
+  // ConversationSnapshot), 0.1.2-alpha.1 passes `useChat` (selector over the
+  // Chat target snapshot). Resolve either; the join below reads the chat
+  // slice off whichever shape arrived.
+  const useSession = (props as TurnCardProps & { useChat?: UseConversationSession }).useChat ?? props.useSession
   const [expanded, setExpanded] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
@@ -100,12 +107,21 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
   } | null>(null)
   const dispatchFiles = useMemo(() => {
     if (snapshot === undefined || turn === undefined) return EMPTY_FILES
+    // 0.1.1-rc.2 nests the chat projection under `.chat` on the whole
+    // ConversationSnapshot; 0.1.2-alpha.1 hands the Chat target snapshot
+    // itself (which already IS the chat slice). Either way `chat` below is
+    // the ChatSnapshot with `locations`/`nodes`.
+    const chat = (snapshot as ConversationSnapshot & { chat?: ConversationSnapshot | undefined }).chat ?? snapshot
+    if (chat === undefined) return EMPTY_FILES
+    const locations = (chat as { locations?: { getTurn: (turn: number) => readonly string[] } | undefined }).locations
+    const nodesStore = (chat as { nodes?: { get: (key: string) => unknown } | undefined }).nodes
+    if (locations === undefined || nodesStore === undefined) return EMPTY_FILES
     const cache = joinCache.current
-    const keys = snapshot.chat.locations.getTurn(turn.turn)
+    const keys = locations.getTurn(turn.turn)
     if (cache !== null && cache.snapshot === snapshot && cache.turn === turn && cache.keys.length === keys.length) {
       let same = true
       for (let i = 0; i < keys.length; i++) {
-        if (cache.keys[i] !== keys[i] || cache.nodes[i] !== snapshot.chat.nodes.get(keys[i])) {
+        if (cache.keys[i] !== keys[i] || cache.nodes[i] !== nodesStore.get(keys[i])) {
           same = false
           break
         }
@@ -115,7 +131,7 @@ export function TurnCard({ matched, turn, sessionId, openFile, getCwd, useSessio
     const nodes: unknown[] = []
     const files: ChangedFile[] = []
     for (const key of keys) {
-      const node = snapshot.chat.nodes.get(key)
+      const node = nodesStore.get(key) as { kind?: string; data?: unknown } | undefined
       nodes.push(node)
       if (node === undefined || node.kind !== 'tool-call') continue
       const root = (node.data as ToolChatData | undefined)?.root

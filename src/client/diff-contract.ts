@@ -212,68 +212,65 @@ function callToolName(block: ToolCallBlock): string {
 }
 
 /**
+ * The `diffs` array of an opaque tool/result `meta` payload, or null. The
+ * edit/write tools persist `FsDiffMeta = { diffs: FileDiff[] }` there on both
+ * supported kernel generations (0.1.1-rc.2 and 0.1.2-alpha.1 — the harness
+ * dropped its presentation view envelope in the latter), making the wire
+ * meta the one diff source this plugin can read on both.
+ */
+function metaDiffs(meta: unknown): unknown {
+  if (meta === null || typeof meta !== 'object') return null
+  const diffs = (meta as Record<string, unknown>)['diffs']
+  return diffs === undefined ? null : diffs
+}
+
+/**
  * Derive the diff-card props for a tool call, or null when this call is not a
  * diff card (running calls use the call-time diff; settled calls use the
- * applied result hunks, which replace the call-time diff). Unlike the stock
- * model, a settled call without a result view falls back to the call-time
- * args diff — that is the PTC sub-call case this plugin exists to cover.
+ * applied result hunks from the wire meta, which replace the call-time diff).
+ * Unlike the stock model, a settled call without meta falls back to the
+ * call-time args diff — that is the PTC sub-call case this plugin exists to
+ * cover.
  * @param block - frozen running or settled call slice.
  * @returns the diff-card props, or null (errored calls stay on the generic path).
  */
 export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   const toolName = callToolName(block)
   if (!('kind' in block)) {
-    // Running: the call view may carry the intended diff; the result is absent.
-    const call = block.callView?.card === 'diff' ? block.callView : null
-    const diffs = call === null ? null : narrowDiffs(call.diffs)
-    if (diffs !== null) return { card: { diffs } }
-    // A code-dispatch sub-call has no call view at all; its args still carry
-    // the intended change, so the call-time fallback keeps the row a diff card.
+    // Running: the wire carries no applied diff yet; the args fallback keeps
+    // the row a diff card (the stock running row derives from args too).
     const fallback = callTimeDiffs(toolName, block.argsRaw)
     if (fallback !== null) markArgHunks(fallback)
     return fallback === null ? null : { card: { diffs: fallback } }
   }
-  // Settled: the result view's applied hunks replace the call-time diff.
-  const result = block.resultView?.card === 'diff' ? block.resultView : null
-  const diffs = result === null ? null : narrowDiffs(result.diffs)
-  if (diffs !== null) return { card: { diffs } }
-  // A settled code-dispatch sub-call never carries a result view (the dispatch
-  // bridge logs no presentation metadata). Successful mutations fall back to
-  // the call-time diff from args; errored ones stay on the generic error path,
+  // Settled: the applied hunks recorded in the result's wire meta.
+  const applied = narrowDiffs(metaDiffs(block.meta))
+  if (applied !== null) return { card: { diffs: applied } }
+  // A settled code-dispatch sub-call carries no meta (the dispatch bridge
+  // logs no presentation metadata). Successful mutations fall back to the
+  // call-time diff from args; errored ones stay on the generic error path,
   // exactly like the stock row (which surfaces the model-facing error text).
   if (block.isError) return null
   const fallback = callTimeDiffs(toolName, block.call?.argsRaw ?? '')
   if (fallback !== null) markArgHunks(fallback)
   return fallback === null ? null : { card: { diffs: fallback } }
 }
-/** A wire tool view carrying an optional diff render intent. */
-export interface WireView {
-  readonly card?: unknown
-  readonly diffs?: unknown
-}
 
 /**
- * The diff hunks for one settled-or-running mutation, in the authoritative
- * order: applied result hunks, then the call view's intended diff, then the
- * argument fallback (the Code Dispatch path). The order is the documented
- * contract — a window that dropped the call head must still render from the
- * result view, and a PTC sub-call with neither view renders from args.
+ * The diff hunks for one settled mutation, in the authoritative order: the
+ * applied hunks from the result's wire `meta`, then the argument fallback
+ * (the Code Dispatch path). The order is the documented contract — a window
+ * that dropped the call head must still render from meta, and a PTC sub-call
+ * with no meta renders from args.
  * @returns the hunks, or null when this call carries no diff material.
  */
 export function mutationHunks(
   toolName: string,
   argsRaw: string,
-  callView: WireView | null | undefined,
-  resultView: WireView | null | undefined,
+  meta: unknown,
 ): DiffHunk[] | null {
-  const result = resultView !== null && resultView !== undefined && resultView.card === 'diff'
-    ? narrowDiffs(resultView.diffs)
-    : null
-  if (result !== null) return result
-  const call = callView !== null && callView !== undefined && callView.card === 'diff'
-    ? narrowDiffs(callView.diffs)
-    : null
-  if (call !== null) return call
+  const applied = narrowDiffs(metaDiffs(meta))
+  if (applied !== null) return applied
   const args = callTimeDiffs(toolName, argsRaw)
   if (args !== null) markArgHunks(args)
   return args

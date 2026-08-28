@@ -1,14 +1,21 @@
 /*
- * Vendored verbatim from deepseek-harness@b150a551b8d465e31e418e1b2eaf5e79bbb7d28e
+ * Vendored verbatim from deepseek-harness@cd5ef8148158c3a752a658978873241fdf8e2bbc (0.1.2-alpha.1)
  * packages/client/ui-tool/src/client/tool/components/ToolRow.module.css.
  *
  * The npm-published dsh-client-ui-tool ships only lib/ (its "./src/*" export
  * target is absent from the tarball), so the stock row chrome cannot be
  * imported from the registry. Re-copy when the stock stylesheet changes; keep
- * this file byte-identical to upstream apart from this header.
+ * this file byte-identical to upstream apart from this header. The variable
+ * fallbacks below degrade gracefully on 0.1.1-rc.2 (whose shell never defines
+ * the content font-size axis): rows render at the fixed fallback size there.
  */
-/* Tool summary row (figma 122:9479): 24px single line —
-   [16 leading] gap6 [title 14/24] gap8 [2x2 dot] gap8 [summary FILL truncate]. */
+/* Tool summary row (figma 122:9479): 24px single line at the default size —
+   [16 leading] gap6 [title 13/24] gap8 [2x2 dot] gap8 [summary FILL truncate].
+   The Settings font-size preference rides the body-published axis: the shared
+   DisclosureRow chrome scales the row height and leading glyph by the body px
+   delta; the title and the summary texts here read the secondary tier
+   (--dsh-content-font-size-secondary: one step under the body — setting −1 at
+   ≤14, setting −2 above), matching think text. */
 
 .root {
   display: flex;
@@ -88,8 +95,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -102,8 +109,8 @@
   flex: none;
   margin-left: 4px;
   white-space: nowrap;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
 }
 
@@ -120,8 +127,8 @@
   background: none;
   font: inherit;
   text-align: left;
-  font-size: 14px;
-  line-height: 24px;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-secondary);
   text-decoration: underline;
   text-decoration-color: var(--dsw-alias-label-quaternary);

@@ -29,8 +29,18 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Required services: the slot registry, the event assembler, the session directory (cwd for path copy), and locale. */
-export const inject = ['slots', 'conversationEvents', 'sessions', 'locale']
+/** Required services: the slot registry, the session directory (cwd for path
+ *  copy), and locale. The conversation event registry is resolved at runtime
+ *  (below) because its service name changed across the two kernel generations
+ *  this build supports ('conversationEvents' → 'uiConversation'). */
+export const inject = ['slots', 'sessions', 'locale']
+
+/** Structural face of either generation's conversation event registry: the
+ *  0.1.1-rc.2 `conversationEvents` service and the 0.1.2-alpha.1
+ *  `uiConversation.events` share this register-and-dispose shape. */
+interface ConversationEvents {
+  register: (definition: typeof turnChangesDefinition) => () => void
+}
 
 /** The tool keys this plugin takes over (the wire tools that emit diff cards).
  *  `str_replace_editor` is the minimal agent preset's editor. */
@@ -92,7 +102,32 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
     }
   }, 'dsh-diff-stat: frosted-glass surfaces')
 
-  ctx.conversationEvents.register(turnChangesDefinition)
+  // The conversation event registry changed its service name in harness
+  // 0.1.2-alpha.1 ('conversationEvents' → 'uiConversation', with register
+  // moved under .events). Resolve either generation at runtime — cordis get
+  // answers undefined for an absent service, so one built client serves both.
+  // The providing plugin's apply order relative to ours is not guaranteed
+  // across generations, so when neither service exists yet, wait on cordis's
+  // 'internal/service' event (fired on every provide) instead of declaring a
+  // hard dependency: an inject entry naming the other generation's absent
+  // service would pend the fiber forever on that kernel.
+  const resolveRegistry = (): ConversationEvents | undefined =>
+    (ctx.get('uiConversation') as { events?: ConversationEvents } | undefined)?.events
+    ?? (ctx.get('conversationEvents') as ConversationEvents | undefined)
+  const registry = resolveRegistry()
+  if (registry !== undefined) {
+    registry.register(turnChangesDefinition)
+  } else {
+    ctx.effect(() => {
+      const off = ctx.on('internal/service', () => {
+        const arrived = resolveRegistry()
+        if (arrived === undefined) return
+        off()
+        arrived.register(turnChangesDefinition)
+      })
+      return off
+    }, 'dsh-diff-stat: conversation registry wait')
+  }
   // The turnTail chain is first-wins (ascending priority, lower tries
   // first): claiming at -1 puts the summary card ahead of ui-deliverables'
   // produced-files chips; when a turn changed nothing our select returns

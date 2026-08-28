@@ -6,12 +6,30 @@
  * never from the closing prose. Structure follows the official ui-deliverables
  * turn accumulator (publishes Turn data, renders no view Node of its own).
  */
-import { isAppendSurfaceEvent, type ConversationMatch, type ConversationNodeDefinition } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConversationMatch, ConversationNodeDefinition, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { mutationHunks, parseArgs, type WireView } from './diff-contract.ts'
+import { mutationHunks, parseArgs } from './diff-contract.ts'
 import { claimFor } from './turn-merge.ts'
+
+/** Message-producing event types that can join the model-visible surface
+ *  (core's `SurfaceEventType` — byte-identical across the two kernel
+ *  generations this build supports). */
+const SURFACE_EVENT_TYPES = new Set<string>(['user/message', 'assistant/message', 'tool/result'])
+
+/**
+ * Local copy of core's append-origin surface predicate, inlined from
+ * `@deepseek-ai/dsh-session/surface` (byte-identical in 0.1.1-rc.2 and
+ * 0.1.2-alpha.1). The runtime re-export this module used to import was
+ * removed with the runtime package in 0.1.2-alpha.1, and importing the core
+ * subpath directly would add a dynamic module-table request the built bundle
+ * cannot resolve on older kernels — a pure local copy keeps the bundle
+ * self-contained on both. ponytail: if the core predicate ever grows beyond
+ * type + `surfaceOp === 'append'`, re-import it and inline at build time.
+ */
+function isAppendSurfaceEvent(event: { readonly type: string; readonly surfaceOp?: unknown }): boolean {
+  return SURFACE_EVENT_TYPES.has(event.type) && event.surfaceOp === 'append'
+}
 
 /** One settled mutation's file and hunks, in settlement order. */
 interface ChangedEntry {
@@ -47,22 +65,22 @@ interface TurnChangesState extends TurnChangesTurnData {
   readonly calls: ReadonlyMap<string, {
     readonly name: string
     readonly argsRaw: string
-    readonly view: ToolResultNode['callView']
   }>
   readonly subCalls: ReadonlySet<string>
 }
 
 /**
  * The mutation hunks a settled tool/result carries, in the authoritative
- * order (result view → call view → argument fallback). Errored results are
- * excluded by the caller: a failed mutation has no diff and must not count.
+ * order (applied wire hunks from the result's `meta`, then the argument
+ * fallback). Errored results are excluded by the caller: a failed mutation
+ * has no diff and must not count.
  */
 function settledHunks(
-  call: { readonly name: string; readonly argsRaw: string; readonly view: ToolResultNode['callView'] } | undefined,
-  resultView: WireView | null | undefined,
+  call: { readonly name: string; readonly argsRaw: string } | undefined,
+  meta: unknown,
 ): DiffHunk[] | null {
   if (call === undefined) return null
-  return mutationHunks(call.name, call.argsRaw, call.view ?? null, resultView ?? null)
+  return mutationHunks(call.name, call.argsRaw, meta)
 }
 
 /**
@@ -78,8 +96,9 @@ function dispatchHunks(data: Record<string, unknown>): DiffHunk[] | null {
   if (typeof data.subCallId !== 'string' || data.subCallId === '') return null
   if (typeof data.name !== 'string' || typeof data.arguments !== 'string') return null
   // Argument sanity lives inside callTimeDiffs (via mutationHunks): only the
-  // edit/write shapes map, anything else contributes nothing.
-  return mutationHunks(data.name, data.arguments, null, null)
+  // edit/write shapes map, anything else contributes nothing. Dispatch records
+  // carry no result meta, so the hunks come from the argument fallback alone.
+  return mutationHunks(data.name, data.arguments, null)
 }
 
 /**
@@ -150,7 +169,6 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
     calls.set(match.event.data.callId, {
       name: String(match.event.data.name ?? ''),
       argsRaw: String(match.event.data.arguments ?? ''),
-      view: match.view?.for === 'call' ? match.view.view : null,
     })
     return {
       ...state,
@@ -165,8 +183,7 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
     const callId = match.event.data.message.source.callId
     if (typeof callId !== 'string' || callId === '') return state
     const call = state.calls.get(callId)
-    const resultView = match.view?.for === 'result' ? match.view.view : null
-    const hunks = settledHunks(call, resultView)
+    const hunks = settledHunks(call, match.event.data.meta)
     if (hunks === null || hunks.length === 0) return state
     // Same call settling twice keeps its first settlement; a later edit to
     // the same file is a distinct call and appends naturally.
