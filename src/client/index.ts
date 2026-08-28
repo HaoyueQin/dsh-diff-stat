@@ -118,6 +118,10 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
   if (registry !== undefined) {
     registry.register(turnChangesDefinition)
   } else {
+    // One diagnostic line while waiting: if the providing plugin never
+    // applies (composed out of the host roster), the turn summary card
+    // silently never appears and this is the only trace saying why.
+    console.warn('[dsh-diff-stat] conversation event registry not up yet — waiting (turn summary card pending)')
     ctx.effect(() => {
       const off = ctx.on('internal/service', () => {
         const arrived = resolveRegistry()

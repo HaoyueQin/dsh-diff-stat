@@ -239,6 +239,10 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   if (!('kind' in block)) {
     // Running: the wire carries no applied diff yet; the args fallback keeps
     // the row a diff card (the stock running row derives from args too).
+    // These hunks are always arg fragments — bare old→new slices with no
+    // file context — so marking them argHunks is correct on BOTH supported
+    // kernel generations: expanding a running row legitimately triggers the
+    // context boost (a best-effort read of the mid-write file).
     const fallback = callTimeDiffs(toolName, block.argsRaw)
     if (fallback !== null) markArgHunks(fallback)
     return fallback === null ? null : { card: { diffs: fallback } }

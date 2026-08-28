@@ -1,10 +1,12 @@
 /**
  * Turn-scoped changed-file accumulator for dsh-diff-stat. Client-only and
- * model-free: files and hunks come from the mutation tools' own presentation
- * contract — the applied result view, the call view, or the argument fallback
- * for Code Dispatch (PTC) sub-calls, whose wire events carry no diff views —
- * never from the closing prose. Structure follows the official ui-deliverables
- * turn accumulator (publishes Turn data, renders no view Node of its own).
+ * model-free: files and hunks come from the wire layer — the applied hunks
+ * the mutation tools persist on the tool/result event's `meta`
+ * (FsDiffMeta, byte-identical across the two supported kernel generations),
+ * or the argument fallback for Code Dispatch (PTC) sub-calls, whose wire
+ * records carry no meta — never from the closing prose. Structure follows
+ * the official ui-deliverables turn accumulator (publishes Turn data,
+ * renders no view Node of its own).
  */
 import type { ConversationMatch, ConversationNodeDefinition, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'

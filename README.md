@@ -68,6 +68,14 @@ pnpm typecheck      # both halves via tsc
 pnpm check:align    # diff aligner & data-model assertions (needs Node >= 23.6)
 ```
 
+> **Kernel compatibility note:** one built bundle targets both harness
+> generations — `0.1.1-rc.2` and `0.1.2-alpha.1`. Compile-time types are
+> pinned to the `0.1.1-rc.2` devDependencies (the newer packages are not on
+> public npm); compatibility with the newer kernel rests on runtime shape
+> checks (`narrowDiffs`, snapshot probing) over wire data that is byte-identical
+> across the two. A future kernel that renames or drops those wire fields
+> will pass `tsc` silently — verify against the newer kernel before shipping.
+
 ## License
 
 MIT
