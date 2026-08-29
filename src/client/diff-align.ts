@@ -188,6 +188,9 @@ export function terminatorOnly(
 ): boolean {
   if (oldText === null || oldText === newText) return false
   if (oldLines.length !== newLines.length) return false
+  // Outside the alignment budget the window renders plain blocks with the
+  // full block arithmetic; keep the badge on the same arithmetic there.
+  if (oldLines.length > ALIGN_MAX_SIDE_LINES || newLines.length > ALIGN_MAX_SIDE_LINES) return false
   for (let i = 0; i < oldLines.length; i++) {
     if (oldLines[i] !== newLines[i]) return false
   }
