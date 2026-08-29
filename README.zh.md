@@ -20,9 +20,9 @@
 - **轮末汇总卡** — 每轮消息流尾部折叠条「N files changed +X −Y」；逐文件行含类型图标、目录、±行数、审查、打开 ▾ 与撤销，同文件多次编辑按结算顺序合并累计
 - **Code Dispatch（PTC）全链路** — dispatch 子调用在 wire 上没有 diff 视图：行内回退到参数推导 diff，轮末卡从 stock 会话工具树 join 出其文件，纯 Code-Mode 轮同样有汇总卡；`subCallId` 去重防止重放双计
 - **文件上下文增强** — 参数推导的裸片段在展开时获得至多 ±3 行真实文件上下文：增强器经 host 围栏 API 读取文件、定位片段的 after 形态并重建 hunk（尽力而为；无法定位的片段保持原样）
-- **撤销** — 一键把本轮文件恢复到轮前状态：hunk 链倒序唯一性回剥、本轮新建文件删除、文件漂移在写入前拒绝、原子提交
+- **撤销** — 一键把本轮文件恢复到轮前状态：hunk 链倒序唯一性回剥、轮首快照证明文件为「本轮新建」（而非覆盖）后才删除、文件漂移在写入前拒绝、原子提交
 - **内嵌查看与打开系** — 点「打开」在行下方展开限高文件预览；「▾」菜单保留系统打开、资源管理器定位、VS Code 与绝对/相对路径复制
-- **毛玻璃（可选）** — 安装 [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) 后，本插件全部表面并入其共享玻璃配方；未安装时保持 stock 不透明外观——优雅降级、零依赖
+- **毛玻璃（可选）** — 安装 [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) 后，本插件全部表面并入其共享玻璃配方；未安装时保持 stock 不透明外观——优雅降级、零新增第三方运行时（peer 模块由 harness 提供）
 - **中英文** — 文案跟随 Web 界面语言（locale 服务）
 
 ## 截图

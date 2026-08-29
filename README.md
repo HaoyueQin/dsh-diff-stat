@@ -20,9 +20,9 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 - **Per-turn summary card** — a collapsible "N files changed +X −Y" bar at each turn's tail; per-file rows with type icons, directory, ±lines, review, open ▾ and undo. Same-file edits merge and accumulate in settlement order
 - **Code Dispatch (PTC), end to end** — dispatch sub-calls carry no wire diff view: rows fall back to the argument-derived diff, and the summary card joins their files from the stock chat tool tree, so a pure Code-Mode turn still gets its card. `subCallId` dedup keeps replays from double-counting
 - **File-context boost** — bare argument fragments gain up to ±3 lines of real file context when expanded: the booster reads the file through the host's fenced API, locates the fragment's post-image and rebuilds the hunk (best-effort; unlocatable fragments keep their bare form)
-- **Undo** — reverts the turn's files to their pre-turn state: reverse uniqueness-checked hunk peeling, created files deleted, drifted files rejected before any write, atomic commits
+- **Undo** — reverts the turn's files to their pre-turn state: reverse uniqueness-checked hunk peeling, turn-start snapshots prove a file was CREATED (not overwritten) before its deletion, drifted files rejected before any write, atomic commits
 - **Inline view & open-with** — "open" expands a height-capped file preview below the row; the ▾ menu keeps system open, Explorer reveal, VS Code, and absolute/relative path copy
-- **Frosted glass (optional)** — with [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) installed, every plugin surface joins its shared glass recipe; without it the stock opaque look stays untouched — graceful degradation, zero dependencies
+- **Frosted glass (optional)** — with [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) installed, every plugin surface joins its shared glass recipe; without it the stock opaque look stays untouched — graceful degradation, zero third-party runtime additions (peer modules come from the harness)
 - **zh / en** — copy follows the Web UI language (locale service)
 
 ## Screenshots

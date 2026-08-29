@@ -1,0 +1,3 @@
+# Build artifacts must stay byte-stable across machines (README contract):
+# never apply line-ending conversion to the committed bundle.
+lib/*.js -text
