@@ -35,10 +35,10 @@
 
 ## 机制
 
-- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行；diff 数据按权威链 resultView → callView → 参数兜底提取，窗口截断丢掉 callView 时仍可从 resultView 渲染
+- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行；diff 数据按权威链提取：工具持久化的 wire meta（含 ±3 行文件上下文），PTC 子调用回退到调用时参数推导——窗口截断丢掉调用头时仍可从 result meta 渲染
 - **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start`、`tool/call`、`tool/result(append)`、`tool/code-dispatch`）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染——结构遵循官方 `ui-deliverables` 模式。Code-Dispatch 文件从 stock 会话工具树 join：其 `tool-call` 节点已把每个 dispatch 按 rootCallId 折叠进根调用的 `subCalls`
 - **上下文增强**：参数来源的 hunk 在构造时按对象身份标记；展开时增强器经围栏 API 读取文件（LRU 缓存）、定位片段的 after 形态并以共享行重建 hunk，无法定位的原样渲染
-- **host 半**（可选）：同源前缀路由提供围栏 API——realpath 包含性解析前后双查、符号链接拒绝、UTF-8 回环校验、512 KiB 读取上限、原子写；host 半缺席时相关操作自动隐藏
+- **host 半**（可选）：同源前缀路由提供围栏 API（files.read、每轮快照 capture、undo、open-with）——realpath 包含性解析前后双查、符号链接拒绝、UTF-8 回环校验、显示读取 512 KiB 上限并带截断标记、undo 32 MiB 门限、原子写；host 半缺席时相关操作自动隐藏
 - **毛玻璃桥**（可选）：零依赖消费 background 插件的 `window.__DSH_BACKGROUND_GLASS__` 注册表——常驻订阅其 ready 事件（覆盖两种到达顺序与热重载）；桥不存在时普通界面原样保留
 
 ## 安装

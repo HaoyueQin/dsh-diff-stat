@@ -35,10 +35,10 @@ Per-turn card with review / open / undo per file (left); an inline badge with it
 
 ## How it works
 
-- **Badges & diffs**: registers the `edit`/`write`/`str_replace_editor` keys of the `tool.call.toolview` keyed slot at priority −1 (shadows the shipped rows). Diff data follows the authoritative chain resultView → callView → argument fallback, so a truncated window that dropped the call head still renders from the result view
+- **Badges & diffs**: registers the `edit`/`write`/`str_replace_editor` keys of the `tool.call.toolview` keyed slot at priority −1 (shadows the shipped rows). Diff data follows the applied wire meta (oldText/newText with ±3 file context) with the call-time argument fallback for PTC sub-calls, so a truncated window that dropped the call head still renders from the result meta
 - **Turn summary card**: a `ConversationNodeDefinition` accumulator (`turn/start`, `tool/call`, `tool/result(append)`, `tool/code-dispatch`) publishes Turn data; the `conversation.chat.turnTail` chain claims rendering — modeled on the official `ui-deliverables` plugin. Code-Dispatch files join from the stock chat tool tree, whose `tool-call` nodes already fold every dispatch into its root call's `subCalls`
 - **Context boost**: argument-derived hunks are marked by object identity at construction; on expand the booster reads the file through the fenced API (LRU-cached), locates the fragment's post-image and rebuilds the hunk with shared lines. Anything unlocatable renders as-is
-- **Host half (optional)**: a same-origin prefix route serves a fenced API — realpath containment checked before and after resolution, symlink rejection, UTF-8 round-trip validation, a 512 KiB read cap and atomic writes. When the host half is absent the dependent actions hide themselves
+- **Host half (optional)**: a same-origin prefix route serves a fenced API (files.read, capture-snapshot per turn, undo, open-with) — realpath containment checked before and after resolution, symlink rejection, UTF-8 round-trip validation, display reads capped at 512 KiB with a truncation flag, a 32 MiB undo gate, and atomic writes. When the host half is absent the dependent actions hide themselves
 - **Frosted glass bridge (optional)**: a zero-dependency consumer of the background plugin's `window.__DSH_BACKGROUND_GLASS__` registry — subscribing to its ready event (both arrival orders + hot reload); the bridge never appearing leaves the ordinary UI untouched
 
 ## Install
