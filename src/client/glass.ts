@@ -46,6 +46,21 @@ const GLASS_GLOBAL = '__DSH_BACKGROUND_GLASS__' as const
 const GLASS_EVENT = 'dsh-background-glass:ready' as const
 
 /**
+ * Structural guard for both bridge surfaces (the global and the event detail):
+ * any window code can dispatch a same-named event or clobber the global, and
+ * passing a partial shape into the caller would throw on .version far from the
+ * source while the old bridge stays un-cleaned — a silent glass failure.
+ */
+function isGlassBridge(value: unknown): value is BackgroundGlassApi {
+  if (value === null || typeof value !== 'object') return false
+  const candidate = value as Partial<BackgroundGlassApi>
+  return candidate.version === 1
+    && candidate.bridgeId === 'deepseek-harness-background'
+    && typeof candidate.isActive === 'function'
+    && typeof candidate.register === 'function'
+}
+
+/**
  * Subscribe to every glass-bridge publication, including hot reloads.
  *
  * The listener keeps watching for the whole fiber: if the background plugin
@@ -57,10 +72,12 @@ const GLASS_EVENT = 'dsh-background-glass:ready' as const
  * @returns the unsubscriber (idempotent).
  */
 export function subscribeGlassReady(listener: (glass: BackgroundGlassApi) => void): () => void {
-  const existing = (window as unknown as Record<string, unknown>)[GLASS_GLOBAL] as BackgroundGlassApi | undefined
-  if (existing !== undefined) listener(existing)
+  const existing = (window as unknown as Record<string, unknown>)[GLASS_GLOBAL]
+  if (isGlassBridge(existing)) listener(existing)
   const onReady = (event: Event): void => {
-    listener((event as CustomEvent<BackgroundGlassApi>).detail)
+    const detail = (event as CustomEvent<unknown>).detail
+    if (!isGlassBridge(detail)) return
+    listener(detail)
   }
   window.addEventListener(GLASS_EVENT, onReady)
   return () => {
