@@ -131,7 +131,7 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
           const sessionId = list.current
           const cwd = sessionId === undefined ? undefined : list.byId[sessionId as SessionId]?.cwd
           if (cwd !== undefined && cwd !== '') {
-            void hostCall('snapshot', { cwd, turn: turnNo })
+            void hostCall('snapshot', { cwd, session: sessionId, turn: turnNo })
           }
         }
         return baseStart!(context, match, reader)
@@ -151,7 +151,7 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
         const arrived = resolveRegistry()
         if (arrived === undefined) return
         off()
-        arrived.register(turnChangesDefinition)
+        arrived.register(snapshotFromStart(turnChangesDefinition))
       })
       return off
     }, 'dsh-diff-stat: conversation registry wait')

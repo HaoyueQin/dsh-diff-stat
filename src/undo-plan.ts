@@ -51,7 +51,16 @@ export type CreateClassification = 'create' | 'overwrite' | 'unverified'
  * @returns `create` — safe to delete; `overwrite` — refused (the file
  *   pre-existed); `unverified` — refused (no evidence either way).
  */
+/** True for paths inside a .git dir: the capture deliberately skips the
+ *  directory, so absence there never proves a creation. */
+function insideGit(path: string): boolean {
+  return /(^|[\\./])\.git([\\./]|$)/.test(path)
+}
+
 export function classifyCreate(snapshot: SnapshotProbe | undefined, path: string): CreateClassification {
+  // .git paths are never captured (the host walk skips the directory for
+  // cost): absence in the snapshot proves nothing about them.
+  if (insideGit(path)) return 'unverified'
   if (snapshot === undefined) return 'unverified'
   const existed = snapshot.has(path)
   if (existed === undefined) return 'unverified'
@@ -61,5 +70,5 @@ export function classifyCreate(snapshot: SnapshotProbe | undefined, path: string
 /** Human-readable undo refusal for one classification. */
 export function createRefusalError(classification: CreateClassification): string {
   if (classification === 'overwrite') return 'file existed before the turn — write replaced it and the prior content cannot be restored; refusing to delete'
-  return 'no turn snapshot — cannot verify this file was created (not an overwrite); refusing to delete'
+  return 'no or incomplete turn snapshot — cannot verify this file was created (not an overwrite); refusing to delete'
 }

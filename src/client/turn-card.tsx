@@ -211,6 +211,7 @@ export function TurnCard(props: TurnCardProps) {
         // before deleting a create-shaped file (an overwrite carries the same
         // null oldText but must never be deleted).
         turn: turn?.turn,
+        session: sessionId,
         files: allFiles.map(file => ({
           path: file.path,
           diffs: file.diffs.map(hunk => ({ oldText: hunk.oldText, newText: hunk.newText })),

@@ -136,7 +136,7 @@ function replaceUnique(text: string, source: string, replacement: string): strin
  * unrecoverable, so deleting there would destroy a pre-existing file).
  * Returns the file's outcome.
  */
-async function undoFile(cwd: string, turn: number | undefined, file: UndoFile): Promise<{ path: string; ok: boolean; error?: string; deleted?: boolean }> {
+async function undoFile(cwd: string, session: string, turn: number | undefined, file: UndoFile): Promise<{ path: string; ok: boolean; error?: string; deleted?: boolean }> {
   try {
     if (!Array.isArray(file.diffs) || file.diffs.length === 0) {
       return { path: file.path, ok: false, error: 'no hunks recorded' }
@@ -155,7 +155,7 @@ async function undoFile(cwd: string, turn: number | undefined, file: UndoFile): 
         // snapshot decides: create → delete; overwrite / unverified → refuse.
         if (text !== hunk.newText) return { path: file.path, ok: false, error: 'file drifted from the recorded create' }
         const classification = classifyCreate(
-          typeof turn === 'number' ? snapshotProbe(cwd, turn) : undefined,
+          typeof turn === 'number' ? snapshotProbe(cwd, session, turn) : undefined,
           resolved.filename,
         )
         if (classification !== 'create') {
@@ -246,16 +246,18 @@ interface TurnSnapshot {
   readonly truncated: boolean
 }
 
-/** key = cwd + '\0' + turn; insertion order doubles as the LRU (evict oldest first). */
+/** key = cwd + '\0' + session + '\0' + turn; insertion order doubles as the
+ * LRU (evict oldest first). The session dimension matters: several sessions
+ * can share one workspace, and turn numbers restart per session. */
 const turnSnapshots = new Map<string, TurnSnapshot>()
 
-function snapshotKey(cwd: string, turn: number): string {
-  return cwd + '\0' + turn
+function snapshotKey(cwd: string, session: string, turn: number): string {
+  return cwd + '\0' + session + '\0' + turn
 }
 
 /** The probe semantic undo needs: undefined turn → undefined answers. */
-function snapshotProbe(cwd: string, turn: number): SnapshotProbe | undefined {
-  return snapshotProbeFrom(turnSnapshots.get(snapshotKey(cwd, turn)))
+function snapshotProbe(cwd: string, session: string, turn: number): SnapshotProbe | undefined {
+  return snapshotProbeFrom(turnSnapshots.get(snapshotKey(cwd, session, turn)))
 }
 
 /**
@@ -264,21 +266,22 @@ function snapshotProbe(cwd: string, turn: number): SnapshotProbe | undefined {
  * cannot be listed contribute nothing, and a workspace that resolves to no
  * real path answers an explicit error (the undo path then refuses deletions).
  */
-async function captureSnapshot(cwd: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
+async function captureSnapshot(cwd: string, session: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
   if (typeof cwd !== 'string' || cwd === '') return { ok: false, error: 'cwd is required' }
   const turnNo = Number(turn)
   if (!Number.isInteger(turnNo) || turnNo < 1) return { ok: false, error: 'turn is required' }
+  const sessionId = typeof session === 'string' ? session : ''
   let root: string
   try {
     root = await realpath(cwd)
   } catch {
     return { ok: false, error: 'workspace not resolved' }
   }
-  // Idempotent: the first capture for a (cwd, turn) pair wins. A window reload
-  // re-running the start match must NOT re-capture at its later time, or a
-  // file created by the turn would look pre-existing and undo would refuse
-  // its deletion.
-  const existingKey = snapshotKey(cwd, turnNo)
+  // Idempotent: the first capture for a (cwd, session, turn) key wins. A
+  // window reload re-running the start match must NOT re-capture at its
+  // later time, or a file created by the turn would look pre-existing and
+  // undo would refuse its deletion.
+  const existingKey = snapshotKey(cwd, sessionId, turnNo)
   if (turnSnapshots.has(existingKey)) return { ok: true, files: turnSnapshots.get(existingKey)!.files.size, truncated: turnSnapshots.get(existingKey)!.truncated }
   const files = new Set<string>()
   let truncated = false
@@ -414,7 +417,7 @@ export function apply(ctx: Context): void {
           return
         }
         if (action === 'snapshot') {
-          respond(res, 200, await captureSnapshot(String(body['cwd'] ?? ''), body['turn']))
+          respond(res, 200, await captureSnapshot(String(body['cwd'] ?? ''), String(body['session'] ?? ''), body['turn']))
           return
         }
         if (action === 'undo') {
@@ -425,9 +428,10 @@ export function apply(ctx: Context): void {
           }
           const turn = body['turn']
           const turnNo = typeof turn === 'number' && Number.isInteger(turn) && turn >= 1 ? turn : undefined
+          const session = String(body['session'] ?? '')
           const results = []
           for (const file of files as UndoFile[]) {
-            results.push(await undoFile(String(body['cwd'] ?? ''), turnNo, {
+            results.push(await undoFile(String(body['cwd'] ?? ''), session, turnNo, {
               path: String(file.path ?? ''),
               diffs: Array.isArray(file.diffs)
                 ? file.diffs.map(hunk => ({

@@ -47,7 +47,10 @@ const LCS_CACHE_LIMIT = 64
 function lcsOps(oldLines: readonly string[], newLines: readonly string[]): AlignOp[] {
   const m = oldLines.length
   const n = newLines.length
-  const cacheKey = oldLines.join('\u0000') + '\u0001' + newLines.join('\u0000')
+  // JSON key: content lines are arbitrary text (edit args may embed any
+  // separator), so a string-joined key could collide on crafted input; the
+  // serialized pair is exact.
+  const cacheKey = JSON.stringify([oldLines, newLines])
   const cached = lcsCache.get(cacheKey)
   if (cached !== undefined) {
     lcsCache.delete(cacheKey)
