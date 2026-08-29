@@ -5,9 +5,15 @@
 import assert from 'node:assert/strict'
 import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client/diff-align.ts'
 import { diffStats } from '../src/client/diff-contract.ts'
-import { claimFor, changesForClosing, collectDispatchFiles, mergeChangedFiles } from '../src/client/turn-merge.ts'
+// (terminatorOnly / terminatorRows added in the second import block below)
+import {
+  EMPTY_CHANGED_FILES, claimFor, changesForClosing, collectDispatchFiles, mergeChangedFiles, pathKey,
+} from '../src/client/turn-merge.ts'
+import { terminatorOnly, terminatorRows } from '../src/client/diff-align.ts'
+import { turnChangesDefinition } from '../src/client/turn-changes.ts'
 import { boostHunkWithContext, BOOST_CONTEXT_LINES } from '../src/client/context-boost.ts'
 import { callTimeDiffs, isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
+import { classifyCreate, createRefusalError } from '../src/undo-plan.ts'
 
 const kinds = rows => rows.map(r => r.kind)
 const lines = text => text.split('\n')
@@ -106,6 +112,23 @@ assert.deepEqual(changedLineCounts(lines('a\nb'), []), { added: 0, removed: 2 })
 
 // 11e. Over budget: null — the caller falls back to block arithmetic.
 assert.equal(changedLineCounts(big(1300), big(1300)), null)
+
+// 11g. Terminator-only change ("a\n" → "a"): line-equal under the LCS, but
+//      a real file change — the badge counts one del + one add, and the
+//      window renders an explicit del/add pair instead of a bare gap row.
+{
+  const hunk = { path: 't.ts', oldText: 'a\n', newText: 'a' }
+  assert.deepEqual(diffStats([hunk]), { added: 1, removed: 1 })
+  assert.equal(terminatorOnly('a\n', 'a', ['a'], ['a']), true)
+  assert.equal(terminatorOnly('a\n', 'b', ['a'], ['b']), false)
+  assert.equal(terminatorOnly(null, 'a', [], ['a']), false)
+  const rendered = alignedHunkRows(['a'], ['a'])
+  assert.ok(rendered !== null)
+  assert.equal(rendered.filter(r => r.kind === 'del').length, 0)
+  const termRows = terminatorRows(['a'], ['a'])
+  assert.deepEqual(termRows, [{ kind: 'del', text: 'a' }, { kind: 'add', text: 'a' }])
+  assert.deepEqual(changedLineCounts(['a'], ['a']), { added: 0, removed: 0 })
+}
 
 // 11f. diffStats over a mixed hunk list equals the rendered del/add rows
 //      (badge, body and footer share one arithmetic).
@@ -207,6 +230,13 @@ assert.equal(boostHunkWithContext({ path: 'f.ts', oldText: 'only', newText: 'ONL
 // 13g. callTimeDiffs write accepts the 'path' argument key as a fallback
 //      (rowModel parity): the wire write schema carries file_path, but a
 //      variant passing path must still derive a diff.
+// 13h. Duplicated content has no single anchor: a fragment appearing more
+//      than once in the file stays unboosted instead of wrapping the wrong
+//      occurrence with context.
+assert.equal(
+  boostHunkWithContext({ path: 'f.ts', oldText: 'x', newText: 'DUP' }, lines('DUP\nmid\nDUP')),
+  null,
+)
 assert.deepEqual(
   callTimeDiffs('write', JSON.stringify({ path: 'p.md', content: 'abc' })),
   [{ path: 'p.md', oldText: null, newText: 'abc' }],
@@ -264,5 +294,79 @@ assert.equal(mergedTurn.length, 2)
 assert.equal(mergedTurn[0].path, 'f.ts')
 assert.equal(mergedTurn[0].diffs.length, 2)
 assert.equal(mergedTurn[1].path, 'g.ts')
+
+// 16. turn-changes route/fold — the pagination-boundary claim: wire
+//     code-dispatch records carry no turn coordinate, so the accumulator
+//     learns rootCallId → Turn from the tool/call match and routes the
+//     dispatch record to the same Turn; a window that dropped tool/call (and
+//     even turn/start) still folds from the engine Location and claims the
+//     card (hasCodeDispatch) next to the still-visible inline badge rows.
+{
+  const turn = 7
+  const rootCallId = 'call_00_router:7'
+  const callEvent = {
+    type: 'tool/call',
+    data: { turn, callId: rootCallId, name: 'run_code', arguments: '{}' },
+  }
+  const dispatchEvent = {
+    type: 'tool/code-dispatch',
+    data: {
+      rootCallId, parentCallId: rootCallId, subCallId: rootCallId + ':code:1',
+      name: 'edit', arguments: { file_path: 'a.ts', old_string: 'x', new_string: 'y' },
+      isError: false,
+    },
+  }
+  const resultEvent = {
+    type: 'tool/result',
+    data: { turn, message: { source: { callId: rootCallId }, content: [{ text: 'ok' }] } },
+  }
+  // Match phase: the tool/call learns the root mapping; the dispatch record
+  // (object args, no turn field — the current wire) routes to the same Turn.
+  assert.deepEqual(turnChangesDefinition.match(callEvent), { id: String(turn), role: 'update' })
+  assert.deepEqual(turnChangesDefinition.match(dispatchEvent), { id: String(turn), role: 'update' })
+  // Fold phase: window starts mid-run — no turn/start, no tool/call — the
+  // engine Location seeds the turn; dispatch hunks are null on this wire
+  // (object args) but the PTC evidence still sets hasCodeDispatch.
+  const locationData = turnChangesDefinition.buildLocationData({
+    matches: [
+      { event: dispatchEvent, role: 'update', location: { kind: 'turn', turn: { turn } } },
+      { event: resultEvent, role: 'update', location: { kind: 'turn', turn: { turn } } },
+    ],
+  }, 'turn')
+  assert.ok(locationData !== null)
+  assert.equal(locationData.turn, turn)
+  assert.equal(locationData.value.hasCodeDispatch, true)
+  assert.equal(locationData.value.changed.length, 0)
+  // The claim mounts (empty match — the card joins the files from the tree).
+  assert.deepEqual(claimFor(locationData.value, 100), EMPTY_CHANGED_FILES)
+}
+
+// 17. undo-plan — the turn snapshot tells an overwrite from a creation: a
+//     wire write carries oldText: null for BOTH, and deleting on an overwrite
+//     destroys a file that pre-existed the turn.
+{
+  const existed = { has: p => p === 'D:/ws/f.ts' }
+  const nothing = { has: () => false }
+  assert.equal(classifyCreate(undefined, 'D:/ws/f.ts'), 'unverified')
+  assert.equal(classifyCreate(existed, 'D:/ws/f.ts'), 'overwrite')
+  assert.equal(classifyCreate(existed, 'D:/ws/g.ts'), 'create')
+  assert.equal(classifyCreate(nothing, 'D:/ws/f.ts'), 'create')
+  assert.ok(createRefusalError('overwrite').includes('existed before the turn'))
+  assert.ok(createRefusalError('unverified').includes('no turn snapshot'))
+}
+
+// 12c. pathKey — "./a.ts" / "a\b.ts" / "a/b.ts" collapse to one row while
+//      the display path keeps the first-seen original.
+assert.equal(pathKey('./a.ts'), 'a.ts')
+assert.equal(pathKey('a\\b.ts'), 'a/b.ts')
+assert.equal(pathKey('a/b.ts'), 'a/b.ts')
+{
+  const nativeSplit = [{ path: './f.ts', diffs: [{ path: './f.ts', oldText: 'a', newText: 'b' }] }]
+  const dispatchSplit = [{ path: 'f.ts', diffs: [{ path: 'f.ts', oldText: 'b', newText: 'c' }] }]
+  const mergedSplit = mergeChangedFiles(nativeSplit, dispatchSplit)
+  assert.equal(mergedSplit.length, 1)
+  assert.equal(mergedSplit[0].path, './f.ts')
+  assert.equal(mergedSplit[0].diffs.length, 2)
+}
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')
