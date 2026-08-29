@@ -23,7 +23,7 @@
  * page that calls it. undo/open-with exist for user-clicked card actions only.
  */
 import { spawn } from 'node:child_process'
-import { readFile, lstat, realpath, readdir, unlink } from 'node:fs/promises'
+import { open, readFile, lstat, realpath, readdir, unlink } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
@@ -62,15 +62,17 @@ interface UndoFile {
   diffs: UndoHunk[]
 }
 
-/** A resolved, fence-checked file: real path, bytes, and validated text. */
-interface ResolvedFile {
+/** A resolved, fence-checked file target: real path, mode and size (no bytes). */
+interface ResolvedTarget {
   /** The request-side path (pre-realpath), kept for swap re-verification. */
   candidate: string
   filename: string
   mode: number
-  bytes: Buffer
-  text: string
+  size: number
 }
+
+/** Files larger than this are refused by undo (the hunk chain needs the whole file). */
+const UNDO_TEXT_LIMIT = 32 * 1024 * 1024
 
 /**
  * Re-verify that a request-side path still resolves to the same target file.
@@ -92,10 +94,11 @@ function inside(root: string, candidate: string): boolean {
 
 /**
  * Resolve a requested path inside the workspace with the full fence: realpath
- * the root, contain the candidate, reject symlinks and non-files, re-contain
- * the resolved path, then validate UTF-8 by round-trip.
+ * the root, contain the candidate, reject symlinks and non-files, and
+ * re-contain the resolved path. File BYTES stay unread here so callers can
+ * cap reads (a giant file must never be loaded whole just to show its head).
  */
-async function resolveFile(cwd: string, requestedPath: string): Promise<ResolvedFile> {
+async function resolveTarget(cwd: string, requestedPath: string): Promise<ResolvedTarget> {
   if (typeof cwd !== 'string' || cwd === '') throw new Error('cwd is required')
   if (typeof requestedPath !== 'string' || requestedPath === '') throw new Error('path is required')
   const root = await realpath(cwd)
@@ -106,11 +109,42 @@ async function resolveFile(cwd: string, requestedPath: string): Promise<Resolved
   if (!linkStat.isFile()) throw new Error('path is not a regular file')
   const filename = await realpath(candidate)
   if (!inside(root, filename)) throw new Error('resolved path is outside the session workspace')
-  const bytes = await readFile(filename)
-  await assertSamePath(candidate, filename)
+  return { candidate, filename, mode: linkStat.mode & 0o777, size: linkStat.size }
+}
+
+/** Read a whole target, then re-verify identity before returning (TOCTOU guard). */
+async function readWhole(target: ResolvedTarget): Promise<{ text: string; bytes: Buffer }> {
+  await assertSamePath(target.candidate, target.filename)
+  const bytes = await readFile(target.filename)
+  await assertSamePath(target.candidate, target.filename)
   const text = bytes.toString('utf8')
   if (!Buffer.from(text, 'utf8').equals(bytes)) throw new Error('file is not valid UTF-8 text')
-  return { candidate, filename, mode: linkStat.mode & 0o777, bytes, text }
+  return { text, bytes }
+}
+
+/**
+ * Read at most maxBytes of a resolved target. Under the cap the whole file is
+ * read with the full UTF-8 round-trip validation; over it only the prefix is
+ * read (a truncation cut lands mid-sequence, handled by utf8SafeSlice at the
+ * display edge) and the UTF-8 guarantee is relaxed to "the returned prefix
+ * decodes" — the cap's purpose is precisely to keep giant binaries out of
+ * memory.
+ */
+async function readTargetText(target: ResolvedTarget, maxBytes: number): Promise<{ text: string; truncated: boolean; size: number }> {
+  if (target.size <= maxBytes) {
+    const whole = await readWhole(target)
+    return { text: whole.text, truncated: false, size: target.size }
+  }
+  const prefixLen = Math.min(maxBytes + 8, target.size)
+  const handle = await open(target.filename, 'r')
+  try {
+    const buf = Buffer.alloc(prefixLen)
+    const { bytesRead } = await handle.read(buf, 0, prefixLen, 0)
+    await assertSamePath(target.candidate, target.filename)
+    return { text: utf8SafeSlice(buf.subarray(0, bytesRead)).toString('utf8'), truncated: true, size: target.size }
+  } finally {
+    await handle.close()
+  }
 }
 
 /**
@@ -141,8 +175,12 @@ async function undoFile(cwd: string, session: string, turn: number | undefined, 
     if (!Array.isArray(file.diffs) || file.diffs.length === 0) {
       return { path: file.path, ok: false, error: 'no hunks recorded' }
     }
-    const resolved = await resolveFile(cwd, file.path)
-    let text = resolved.text
+    const target = await resolveTarget(cwd, file.path)
+    if (target.size > UNDO_TEXT_LIMIT) {
+      return { path: file.path, ok: false, error: 'file too large to undo safely (' + target.size + ' bytes)' }
+    }
+    const resolvedText = (await readWhole(target)).text
+    let text = resolvedText
     let created = false
     for (let i = file.diffs.length - 1; i >= 0; i -= 1) {
       const hunk = file.diffs[i]
@@ -156,7 +194,7 @@ async function undoFile(cwd: string, session: string, turn: number | undefined, 
         if (text !== hunk.newText) return { path: file.path, ok: false, error: 'file drifted from the recorded create' }
         const classification = classifyCreate(
           typeof turn === 'number' ? snapshotProbe(cwd, session, turn) : undefined,
-          resolved.filename,
+          target.filename,
         )
         if (classification !== 'create') {
           return { path: file.path, ok: false, error: createRefusalError(classification) }
@@ -171,13 +209,13 @@ async function undoFile(cwd: string, session: string, turn: number | undefined, 
       }
     }
     // Re-verify before the destructive step: the file may have been swapped
-    // to a link since resolveFile's read-time check.
-    await assertSamePath(resolved.candidate, resolved.filename)
+    // to a link since the read-time check.
+    await assertSamePath(target.candidate, target.filename)
     if (created) {
-      await unlink(resolved.filename)
+      await unlink(target.filename)
       return { path: file.path, ok: true, deleted: true }
     }
-    await writeFileAtomic(resolved.filename, text, { mode: resolved.mode })
+    await writeFileAtomic(target.filename, text, { mode: target.mode })
     return { path: file.path, ok: true }
   } catch (error) {
     return { path: file.path, ok: false, error: String((error as Error).message ?? error) }
@@ -190,22 +228,40 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
     void (async () => {
       try {
         // Fence the path like every other endpoint: the opener must not
-        // become a probe for paths outside the session workspace.
-        const resolved = await resolveFile(cwd, requestedPath)
+        // become a probe for paths outside the session workspace. Only the
+        // target (never the bytes) is needed — the opener takes the path.
+        const resolvedTarget = await resolveTarget(cwd, requestedPath)
         // Both openers run a quoted command line through the shell, and cmd
         // expands %VAR% inside quotes — a name like report%TEMP%.md would
         // silently open something else. NTFS forbids quotes in names anyway;
         // reject both characters up front on the value that reaches the line.
-        if (/["%]/.test(resolved.filename)) {
+        if (/["%]/.test(resolvedTarget.filename)) {
           rejectPromise(new Error('path contains a shell-special character (quote or %)'))
           return
+        }
+        if (target === 'explorer' || target === 'vscode') {
+          // A missing opener must fail visibly, not "succeed": spawn with
+          // shell:true always starts cmd, so a missing explorer/code only
+          // surfaces as a nonzero exit inside the shell — the 'error' event
+          // never fires and the timeouts below would report success. Probe
+          // the shim first (where is cmd built-in).
+          const probe = spawn('where', [target === 'explorer' ? 'explorer' : 'code'], { shell: false })
+          const probeExit = await new Promise<number>((resolveProbe) => {
+            probe.once('error', () => resolveProbe(-1))
+            probe.once('exit', (code) => resolveProbe(code ?? -1))
+          })
+          probe.kill()
+          if (probeExit !== 0) {
+            rejectPromise(new Error(target === 'explorer' ? 'explorer is not available on this system' : 'code (VS Code CLI) is not available on this system'))
+            return
+          }
         }
         if (target === 'explorer') {
           // explorer /select,"<path>" reveals the file in its folder. The
           // quoting CANNOT survive spawn's array form: Node re-escapes the
           // embedded quotes and explorer, seeing a mangled argument, falls
           // back to its default view. Pass the literal line through the shell.
-          const child = spawn('explorer /select,"' + resolved.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
+          const child = spawn('explorer /select,"' + resolvedTarget.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
           child.unref()
           child.once('error', rejectPromise)
           // explorer returns a nonzero/late exit by design; the spawn
@@ -213,7 +269,7 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
           setTimeout(() => resolvePromise(), 300)
         } else if (target === 'vscode') {
           // code is a .cmd shim on Windows; shell: true resolves it.
-          const child = spawn('code "' + resolved.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
+          const child = spawn('code "' + resolvedTarget.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
           child.unref()
           child.once('error', rejectPromise)
           setTimeout(() => resolvePromise(), 300)
@@ -241,7 +297,6 @@ const SNAPSHOT_MAX_FILES = 100_000
 const SNAPSHOT_SKIP_DIRS = new Set(['node_modules', '.git'])
 
 interface TurnSnapshot {
-  readonly at: number
   readonly files: ReadonlySet<string>
   readonly truncated: boolean
 }
@@ -250,6 +305,10 @@ interface TurnSnapshot {
  * LRU (evict oldest first). The session dimension matters: several sessions
  * can share one workspace, and turn numbers restart per session. */
 const turnSnapshots = new Map<string, TurnSnapshot>()
+/** In-flight captures per key: a history window replay starts N turns at once
+ * and each walk is a full-tree readdir — concurrent identical walks would
+ * spike I/O for zero extra information. */
+const pendingSnapshots = new Map<string, Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }>>()
 
 function snapshotKey(cwd: string, session: string, turn: number): string {
   return cwd + '\0' + session + '\0' + turn
@@ -266,7 +325,7 @@ function snapshotProbe(cwd: string, session: string, turn: number): SnapshotProb
  * cannot be listed contribute nothing, and a workspace that resolves to no
  * real path answers an explicit error (the undo path then refuses deletions).
  */
-async function captureSnapshot(cwd: string, session: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
+async function captureSnapshotInner(cwd: string, session: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
   if (typeof cwd !== 'string' || cwd === '') return { ok: false, error: 'cwd is required' }
   const turnNo = Number(turn)
   if (!Number.isInteger(turnNo) || turnNo < 1) return { ok: false, error: 'turn is required' }
@@ -295,6 +354,9 @@ async function captureSnapshot(cwd: string, session: string, turn: unknown): Pro
     try {
       entries = await readdir(dir, { withFileTypes: true })
     } catch {
+      // An unlistable directory (ACL, deleted mid-walk) silently contributes
+      // nothing; its absence must read unverified, never create.
+      truncated = true
       return
     }
     for (const entry of entries) {
@@ -308,17 +370,39 @@ async function captureSnapshot(cwd: string, session: string, turn: unknown): Pro
         await walk(full)
         continue
       }
-      if (entry.isFile()) files.add(full)
+      if (entry.isFile()) {
+        files.add(full)
+        continue
+      }
+      // Junctions/symlinks (and anything else) are neither recorded nor
+      // descended: absence of their target paths must read unverified.
+      truncated = true
     }
   }
   await walk(root)
-  turnSnapshots.set(existingKey, { at: Date.now(), files, truncated })
+  turnSnapshots.set(existingKey, { files, truncated })
   while (turnSnapshots.size > SNAPSHOT_MAX_TURNS) {
     const oldest = turnSnapshots.keys().next().value
     if (oldest === undefined) break
     turnSnapshots.delete(oldest)
   }
   return { ok: true, files: files.size, truncated }
+}
+
+/**
+ * Concurrency-guarded capture entry: one walk per (cwd, session, turn) key
+ * even when a history replay starts several turns in the same tick — the
+ * walk is a full-tree readdir and parallel identical walks help nobody.
+ */
+async function captureSnapshot(cwd: string, session: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
+  const pendingKey = snapshotKey(cwd, String(session ?? ''), typeof turn === 'number' ? turn : NaN)
+  const inFlight = pendingSnapshots.get(pendingKey)
+  if (inFlight !== undefined) return inFlight
+  const run = captureSnapshotInner(cwd, session, turn).finally(() => {
+    pendingSnapshots.delete(pendingKey)
+  })
+  pendingSnapshots.set(pendingKey, run)
+  return run
 }
 
 /** Read the request body with a hard cap; rejects oversized or non-JSON bodies. */
@@ -400,20 +484,24 @@ export function apply(ctx: Context): void {
         const action = route.startsWith(API_PREFIX + '/') ? route.slice(API_PREFIX.length + 1) : (route.startsWith('/') ? route.slice(1) : route)
         const body = await readJsonBody(req, res)
         if (action === 'files.read') {
-          const resolved = await resolveFile(String(body['cwd'] ?? ''), String(body['path'] ?? ''))
-          if (resolved.bytes.includes(0)) {
-            respond(res, 200, { kind: 'binary', truncated: false, size: resolved.bytes.length })
+          const target = await resolveTarget(String(body['cwd'] ?? ''), String(body['path'] ?? ''))
+          if (target.size > READ_CAP) {
+            // A giant file is never loaded whole: only its head (plus the
+            // mid-sequence tail guard) enters memory.
+            const head = await readTargetText(target, READ_CAP)
+            respond(res, 200, { kind: 'text', content: head.text, truncated: true, size: head.size })
             return
           }
-          const truncated = resolved.bytes.length > READ_CAP
-          const raw = truncated
-            ? utf8SafeSlice(resolved.bytes.subarray(0, READ_CAP)).toString('utf8')
-            : resolved.text
+          const whole = await readWhole(target)
+          if (whole.bytes.includes(0)) {
+            respond(res, 200, { kind: 'binary', truncated: false, size: target.size })
+            return
+          }
           // Display layer only: strip a leading UTF-8 BOM so the first diff
           // line does not carry an invisible U+FEFF. Undo paths keep the
           // original text and therefore the BOM byte-for-byte.
-          const content = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw
-          respond(res, 200, { kind: 'text', content, truncated, size: resolved.bytes.length })
+          const content = whole.text.charCodeAt(0) === 0xFEFF ? whole.text.slice(1) : whole.text
+          respond(res, 200, { kind: 'text', content, truncated: false, size: target.size })
           return
         }
         if (action === 'snapshot') {
@@ -451,6 +539,9 @@ export function apply(ctx: Context): void {
         }
         respond(res, 404, { ok: false, error: 'unknown action' })
       } catch (error) {
+        // A body-cap 413 answers before rejecting; responding again would
+        // throw ERR_HTTP_HEADERS_SENT into the awaited handler.
+        if (res.headersSent) return
         respond(res, 200, { ok: false, error: String((error as Error).message ?? error) })
       }
     },

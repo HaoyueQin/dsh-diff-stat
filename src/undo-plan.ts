@@ -51,16 +51,21 @@ export type CreateClassification = 'create' | 'overwrite' | 'unverified'
  * @returns `create` — safe to delete; `overwrite` — refused (the file
  *   pre-existed); `unverified` — refused (no evidence either way).
  */
-/** True for paths inside a .git dir: the capture deliberately skips the
- *  directory, so absence there never proves a creation. */
-function insideGit(path: string): boolean {
-  return /(^|[\\./])\.git([\\./]|$)/.test(path)
+/**
+ * True for paths inside a directory the capture deliberately skips (the walk
+ * never descends into them for cost, so absence there never proves a
+ * creation): .git itself plus any directory named node_modules (dependency
+ * trees can nest several levels deep).
+ */
+function insideSkippedDir(path: string): boolean {
+  return /(^|[\\./])(\.git|node_modules)([\\./]|$)/.test(path)
 }
 
 export function classifyCreate(snapshot: SnapshotProbe | undefined, path: string): CreateClassification {
-  // .git paths are never captured (the host walk skips the directory for
-  // cost): absence in the snapshot proves nothing about them.
-  if (insideGit(path)) return 'unverified'
+  // Skipped-dir paths are never captured: absence in the snapshot proves
+  // nothing about them — deleting on such evidence is the one direction this
+  // guard must never take.
+  if (insideSkippedDir(path)) return 'unverified'
   if (snapshot === undefined) return 'unverified'
   const existed = snapshot.has(path)
   if (existed === undefined) return 'unverified'
