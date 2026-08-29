@@ -23,11 +23,12 @@
  * page that calls it. undo/open-with exist for user-clicked card actions only.
  */
 import { spawn } from 'node:child_process'
-import { readFile, lstat, realpath, unlink } from 'node:fs/promises'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { readFile, lstat, realpath, readdir, unlink } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { classifyCreate, createRefusalError, type SnapshotProbe } from './undo-plan.ts'
 
 export const name = 'dsh-diff-stat'
 
@@ -129,9 +130,13 @@ function replaceUnique(text: string, source: string, replacement: string): strin
  * Undo one file's hunk chain in memory: peel edits in reverse settlement
  * order (applied text → prior text, uniqueness-checked), and when the chain
  * bottoms out at a create (oldText null), require the peeled text to equal
- * the created content exactly, then delete. Returns the file's outcome.
+ * the created content exactly, then delete — but only when the turn snapshot
+ * proves the file did not exist before the turn (a write that overwrote an
+ * existing file also carries oldText: null, and its prior content is
+ * unrecoverable, so deleting there would destroy a pre-existing file).
+ * Returns the file's outcome.
  */
-async function undoFile(cwd: string, file: UndoFile): Promise<{ path: string; ok: boolean; error?: string; deleted?: boolean }> {
+async function undoFile(cwd: string, turn: number | undefined, file: UndoFile): Promise<{ path: string; ok: boolean; error?: string; deleted?: boolean }> {
   try {
     if (!Array.isArray(file.diffs) || file.diffs.length === 0) {
       return { path: file.path, ok: false, error: 'no hunks recorded' }
@@ -145,9 +150,17 @@ async function undoFile(cwd: string, file: UndoFile): Promise<{ path: string; ok
         return { path: file.path, ok: false, error: 'malformed hunk' }
       }
       if (hunk.oldText === null) {
-        // The create that started this file's turn: everything after it must
-        // peel back to exactly the created content, else the file drifted.
+        // The create (or overwrite-rendering) at the bottom of this file's
+        // chain. Peeled text must equal the write's full content, then the
+        // snapshot decides: create → delete; overwrite / unverified → refuse.
         if (text !== hunk.newText) return { path: file.path, ok: false, error: 'file drifted from the recorded create' }
+        const classification = classifyCreate(
+          typeof turn === 'number' ? snapshotProbe(cwd, turn) : undefined,
+          resolved.filename,
+        )
+        if (classification !== 'create') {
+          return { path: file.path, ok: false, error: createRefusalError(classification) }
+        }
         created = true
       } else if (typeof hunk.oldText !== 'string') {
         return { path: file.path, ok: false, error: 'malformed hunk' }
@@ -214,8 +227,91 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
   })
 }
 
+/**
+ * Turn-start file-existence snapshots for the undo create/overwrite guard.
+ * A wire `write` (or str_replace_editor create/insert) records oldText: null
+ * for BOTH a fresh creation and an overwrite; without the snapshot undo can
+ * only guess, and guessing wrong deletes a file that pre-existed the turn.
+ * The snapshot records existence only (never content, never reads file
+ * bytes), so capture cost is one directory walk of the workspace with
+ * node_modules/.git skipped — cheap enough to run per turn.
+ */
+const SNAPSHOT_MAX_TURNS = 16
+const SNAPSHOT_MAX_FILES = 100_000
+const SNAPSHOT_MAX_DEPTH = 8
+const SNAPSHOT_SKIP_DIRS = new Set(['node_modules', '.git'])
+
+interface TurnSnapshot {
+  readonly at: number
+  readonly files: ReadonlySet<string>
+}
+
+/** key = cwd + '\0' + turn; insertion order doubles as the LRU (evict oldest first). */
+const turnSnapshots = new Map<string, TurnSnapshot>()
+
+function snapshotKey(cwd: string, turn: number): string {
+  return cwd + '\0' + turn
+}
+
+/** The probe semantic undo needs: undefined turn → undefined answers. */
+function snapshotProbe(cwd: string, turn: number): SnapshotProbe | undefined {
+  const record = turnSnapshots.get(snapshotKey(cwd, turn))
+  if (record === undefined) return undefined
+  return { has: (path: string) => (record.files.has(path) ? true : false) }
+}
+
+/**
+ * Capture one turn's file-existence snapshot. Existence only: file bytes are
+ * never read and content is never stored. Best-effort — directories that
+ * cannot be listed contribute nothing, and a workspace that resolves to no
+ * real path answers an explicit error (the undo path then refuses deletions).
+ */
+async function captureSnapshot(cwd: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
+  if (typeof cwd !== 'string' || cwd === '') return { ok: false, error: 'cwd is required' }
+  const turnNo = Number(turn)
+  if (!Number.isInteger(turnNo) || turnNo < 1) return { ok: false, error: 'turn is required' }
+  let root: string
+  try {
+    root = await realpath(cwd)
+  } catch {
+    return { ok: false, error: 'workspace not resolved' }
+  }
+  const files = new Set<string>()
+  let truncated = false
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    if (truncated) return
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries) {
+      if (files.size >= SNAPSHOT_MAX_FILES) {
+        truncated = true
+        return
+      }
+      if (SNAPSHOT_SKIP_DIRS.has(entry.name)) continue
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (depth < SNAPSHOT_MAX_DEPTH) await walk(full, depth + 1)
+        continue
+      }
+      if (entry.isFile()) files.add(full)
+    }
+  }
+  await walk(root, 0)
+  turnSnapshots.set(snapshotKey(cwd, turnNo), { at: Date.now(), files })
+  while (turnSnapshots.size > SNAPSHOT_MAX_TURNS) {
+    const oldest = turnSnapshots.keys().next().value
+    if (oldest === undefined) break
+    turnSnapshots.delete(oldest)
+  }
+  return { ok: true, files: files.size, truncated }
+}
+
 /** Read the request body with a hard cap; rejects oversized or non-JSON bodies. */
-function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+function readJsonBody(req: IncomingMessage, res: ServerResponse): Promise<Record<string, unknown>> {
   return new Promise((resolvePromise, rejectPromise) => {
     const chunks: Buffer[] = []
     let size = 0
@@ -223,6 +319,10 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
       size += chunk.length
       if (size > BODY_CAP) {
         rejectPromise(new Error('request body too large'))
+        // Answer before destroying: a bare destroy surfaces as a network
+        // failure to the client, indistinguishable from the host being gone.
+        res.writeHead(413, { 'content-type': 'application/json; charset=utf-8' })
+        res.end(JSON.stringify({ ok: false, error: 'request body too large' }))
         req.destroy()
         return
       }
@@ -287,7 +387,7 @@ export function apply(ctx: Context): void {
           return
         }
         const action = route.startsWith(API_PREFIX + '/') ? route.slice(API_PREFIX.length + 1) : (route.startsWith('/') ? route.slice(1) : route)
-        const body = await readJsonBody(req)
+        const body = await readJsonBody(req, res)
         if (action === 'files.read') {
           const resolved = await resolveFile(String(body['cwd'] ?? ''), String(body['path'] ?? ''))
           if (resolved.bytes.includes(0)) {
@@ -305,15 +405,21 @@ export function apply(ctx: Context): void {
           respond(res, 200, { kind: 'text', content, truncated, size: resolved.bytes.length })
           return
         }
+        if (action === 'snapshot') {
+          respond(res, 200, await captureSnapshot(String(body['cwd'] ?? ''), body['turn']))
+          return
+        }
         if (action === 'undo') {
           const files = body['files']
           if (!Array.isArray(files)) {
             respond(res, 200, { ok: false, error: 'files must be an array', results: [] })
             return
           }
+          const turn = body['turn']
+          const turnNo = typeof turn === 'number' && Number.isInteger(turn) && turn >= 1 ? turn : undefined
           const results = []
           for (const file of files as UndoFile[]) {
-            results.push(await undoFile(String(body['cwd'] ?? ''), {
+            results.push(await undoFile(String(body['cwd'] ?? ''), turnNo, {
               path: String(file.path ?? ''),
               diffs: Array.isArray(file.diffs)
                 ? file.diffs.map(hunk => ({

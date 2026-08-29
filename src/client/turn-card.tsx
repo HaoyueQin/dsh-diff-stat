@@ -24,7 +24,7 @@ import { diffStats, isArgHunk } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
 import { collectDispatchFiles, mergeChangedFiles } from './turn-merge.ts'
 import { boostEditHunks } from './context-boost.ts'
-import { NS, type DiffStatKey } from './locales.ts'
+import { NS } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
 import { DiffWindow } from './diff-window.tsx'
@@ -207,6 +207,10 @@ export function TurnCard(props: TurnCardProps) {
     void (async () => {
       const result = await hostCall<{ ok: boolean }>('undo', {
         cwd,
+        // The turn coordinate lets the host check its turn-start snapshot
+        // before deleting a create-shaped file (an overwrite carries the same
+        // null oldText but must never be deleted).
+        turn: turn?.turn,
         files: allFiles.map(file => ({
           path: file.path,
           diffs: file.diffs.map(hunk => ({ oldText: hunk.oldText, newText: hunk.newText })),

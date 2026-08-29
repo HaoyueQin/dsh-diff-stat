@@ -17,6 +17,7 @@ import type { ClientContext, ISessions, SessionId } from '@deepseek-ai/dsh-clien
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { subscribeGlassReady } from './glass.ts'
+import { hostCall } from './api.ts'
 import { MutationRow } from './mutation-row.tsx'
 import { selectChangedFiles, turnChangesDefinition } from './turn-changes.ts'
 import { TurnCard } from './turn-card.tsx'
@@ -114,9 +115,32 @@ export function apply(ctx: ClientContext & { sessions: ISessions }): void {
   const resolveRegistry = (): ConversationEvents | undefined =>
     (ctx.get('uiConversation') as { events?: ConversationEvents } | undefined)?.events
     ?? (ctx.get('conversationEvents') as ConversationEvents | undefined)
+  // Every turn/start asks the host for a file-existence snapshot of the
+  // workspace: the undo guard needs to tell a turn's file creation from a
+  // write that OVERWROTE a pre-existing file (both carry oldText: null, and
+  // the overwritten content is unrecoverable once written). Fire-and-forget:
+  // a snapshot that never lands simply makes undo refuse deletions (safe).
+  const snapshotFromStart = (definition: typeof turnChangesDefinition): typeof turnChangesDefinition => {
+    const baseStart = definition.start
+    return {
+      ...definition,
+      start: (context, match, reader) => {
+        const turnNo = (match.event.data as { turn?: unknown }).turn
+        if (typeof turnNo === 'number') {
+          const list = sessions.list.getSnapshot()
+          const sessionId = list.current
+          const cwd = sessionId === undefined ? undefined : list.byId[sessionId as SessionId]?.cwd
+          if (cwd !== undefined && cwd !== '') {
+            void hostCall('snapshot', { cwd, turn: turnNo })
+          }
+        }
+        return baseStart!(context, match, reader)
+      },
+    }
+  }
   const registry = resolveRegistry()
   if (registry !== undefined) {
-    registry.register(turnChangesDefinition)
+    registry.register(snapshotFromStart(turnChangesDefinition))
   } else {
     // One diagnostic line while waiting: if the providing plugin never
     // applies (composed out of the host roster), the turn summary card
