@@ -8,10 +8,10 @@
  * the official ui-deliverables turn accumulator (publishes Turn data,
  * renders no view Node of its own).
  */
-import type { ConversationMatch, ConversationNodeDefinition, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConversationMatch, ConversationNodeDefinition } from '@deepseek-ai/dsh-client-runtime/client'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { mutationHunks, parseArgs } from './diff-contract.ts'
+import { mutationHunks } from './diff-contract.ts'
 import { claimFor } from './turn-merge.ts'
 
 /** Message-producing event types that can join the model-visible surface
@@ -135,6 +135,17 @@ export { changesForClosing, claimFor } from './turn-merge.ts'
 const selectMemo = new WeakMap<object, Map<number, readonly ChangedFile[] | null>>()
 
 /**
+ * rootCallId → Turn learned from `tool/call` matches, for routing wire
+ * code-dispatch records that omit the dispatch turn coordinate. Call ids are
+ * minted once per session (globally unique), so entries never collide across
+ * sessions or window reloads; stale entries simply stop matching and fade.
+ * Bounded defensively: entries are one small record per run_code call, so the
+ * cap only guards against a pathological long-lived page.
+ */
+const rootCallTurn = new Map<string, number>()
+const ROOT_CALL_TURN_LIMIT = 8192
+
+/**
  * Claim the turn-tail chain only when its closing turn changed files.
  * @param owner - Turn-tail owner currency for the closing assistant.
  * @returns Changed files as the component's match, or null to decline before mount.
@@ -200,7 +211,16 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
   if (dispatch !== null) {
     const data = dispatch
     const hunks = dispatchHunks(data)
-    if (hunks === null || hunks.length === 0) return state
+    if (hunks === null || hunks.length === 0) {
+      // PTC evidence stands on its own: a dispatch record exists only inside a
+      // run_code run, so this turn ran code dispatch even when the record's
+      // args shape yields no hunks here (the card joins those from the chat
+      // tool tree). Claiming without it would let a pagination boundary that
+      // dropped the run_code tool/call event hide the whole card while the
+      // inline badge rows — rebuilt from the same window by the stock
+      // fallbackState — stay visible.
+      return { ...state, hasCodeDispatch: true }
+    }
     // Dedup key is the root+sub pair: replays and duplicate dispatch
     // records must not double-count a file, and equal sub ids under
     // different roots stay distinct.
@@ -217,6 +237,22 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
     }
   }
   return state
+}
+
+/**
+ * The engine-owned turn coordinate of a match: its resolved Location when the
+ * engine placed it (the authoritative axis — wire dispatch records carry no
+ * turn field, so this is the only way a window-start dispatch match can seed
+ * the fold), else the event's explicit turn field (older kernels).
+ */
+function matchTurn(match: ConversationMatch): number | undefined {
+  const location = match.location
+  if (location.kind === 'step' || location.kind === 'turn') {
+    const turn = location.turn?.turn
+    if (typeof turn === 'number') return turn
+  }
+  const direct = (match.event.data as { turn?: unknown }).turn
+  return typeof direct === 'number' ? direct : undefined
 }
 
 /**
@@ -237,9 +273,11 @@ function foldMatches(matches: readonly ConversationMatch[]): TurnChangesState | 
       continue
     }
     if (state === undefined) {
-      // Window-start match may be any event type; only turn coordinate rides it.
-      const turn = (match.event.data as { turn?: unknown }).turn
-      if (typeof turn !== 'number') continue
+      // Window-start match may be any event type; only the turn coordinate
+      // seeds the fold — read it from the engine's Location (authoritative
+      // for wire records without a turn field) with the event field fallback.
+      const turn = matchTurn(match)
+      if (turn === undefined) continue
       state = { turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
     }
     state = applyUpdateState(state, match)
@@ -255,15 +293,34 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
   kind: 'diff-stat',
   match: (event) => {
     if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
-    if (event.type === 'tool/call') return { id: String(event.data.turn), role: 'update' }
+    if (event.type === 'tool/call') {
+      // Learn rootCallId → Turn, the coordinate wire code-dispatch records
+      // lack: a pagination boundary can drop the root call's tool/call from
+      // the window while its dispatch records survive it, and the stock
+      // tool-call fallbackState still renders the sub-rows from those — the
+      // accumulator must route them to the same Turn or the card alone
+      // disappears.
+      const learnedTurn = event.data.turn
+      if (typeof learnedTurn === 'number' && event.data.callId) {
+        if (rootCallTurn.size >= ROOT_CALL_TURN_LIMIT) rootCallTurn.clear()
+        rootCallTurn.set(String(event.data.callId), learnedTurn)
+      }
+      return { id: String(event.data.turn), role: 'update' }
+    }
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
       return { id: String(event.data.turn), role: 'update' }
     }
     const dispatch = codeDispatchData(event)
     if (dispatch !== null) {
-      // Dispatch records without a turn coordinate cannot be routed to a
-      // Turn context — skip rather than minting an "undefined" context id.
-      const turn = dispatch['turn']
+      // Old-kernel records carried an explicit turn coordinate (kept for
+      // 0.1.1-rc.2); the current wire omits it, so fall back to the Turn
+      // learned from the root call. Neither available → this event cannot be
+      // routed and stays outside every Turn context (best effort, as before).
+      const explicit = dispatch['turn']
+      const learned = typeof dispatch['rootCallId'] === 'string'
+        ? rootCallTurn.get(dispatch['rootCallId'])
+        : undefined
+      const turn = typeof explicit === 'number' ? explicit : learned
       return typeof turn === 'number' ? { id: String(turn), role: 'update' } : null
     }
     return null
@@ -289,5 +346,3 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
   },
 }
 
-/** Re-exported for the card: parse args once for the relative-path display. */
-export { parseArgs }
