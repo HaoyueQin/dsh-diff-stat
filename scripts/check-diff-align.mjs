@@ -139,6 +139,11 @@ assert.equal(changedLineCounts(big(1300), big(1300)), null)
   assert.deepEqual(diffStats([bigHunk]), { added: 1300, removed: 1300 })
 }
 
+// 11i. Empty creation (oldText null, newText ''): a file appeared with zero
+//      content rows — the badge counts one added line, never +0 −0.
+assert.deepEqual(diffStats([{ path: 'e.ts', oldText: null, newText: '' }]), { added: 1, removed: 0 })
+assert.deepEqual(changedLineCounts([], []), { added: 0, removed: 0 })
+
 // 11f. diffStats over a mixed hunk list equals the rendered del/add rows
 //      (badge, body and footer share one arithmetic).
 const hunks = [
@@ -374,6 +379,11 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   assert.equal(classifyCreate(exactCap, 'D:/ws/sub/.git/x'), 'unverified')
   assert.equal(classifyCreate(exactCap, 'D:/ws/.gitignore'), 'create')
   assert.equal(classifyCreate(exactCap, 'D:\\ws\\.git\\COMMIT_MSG_TMP'), 'unverified')
+  // node_modules is skipped by the walk too: its absence must read unverified,
+  // never create (a dependency file overwritten in-turn must never be deleted).
+  assert.equal(classifyCreate(exactCap, 'D:/ws/node_modules/pkg/x.ts'), 'unverified')
+  assert.equal(classifyCreate(exactCap, 'D:/ws/a/node_modules/pkg/x.ts'), 'unverified')
+  assert.equal(classifyCreate(exactCap, 'D:/ws/node_modules-pkg/x.ts'), 'create')
 }
 
 // 12c. pathKey — "./a.ts" / "a\b.ts" / "a/b.ts" collapse to one row while
