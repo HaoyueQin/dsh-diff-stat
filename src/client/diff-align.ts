@@ -31,15 +31,33 @@ interface AlignOp {
 }
 
 /**
+ * LCS result cache: the same two sides are aligned by the badge arithmetic
+ * (diffStats) AND by the rendered window, and one expanded file can re-render
+ * across fold/collapse changes — the DP is the expensive step (up to ~1.4 M
+ * comparisons at the 1200-line budget), the op stream is the reuse unit.
+ * Keyed on the joined lines (cheap vs the DP), LRU-bounded.
+ */
+const lcsCache = new Map<string, AlignOp[]>()
+const LCS_CACHE_LIMIT = 64
+
+/**
  * Walk the two sides through an LCS dynamic program into a del/add/ctx op
  * stream. Ties prefer deletions first, matching unified diff ordering.
  */
 function lcsOps(oldLines: readonly string[], newLines: readonly string[]): AlignOp[] {
   const m = oldLines.length
   const n = newLines.length
-  // Trivial sides (create / wipe) need no table: the answer is one-sided.
-  if (m === 0) return newLines.map(text => ({ kind: 'add' as const, text }))
-  if (n === 0) return oldLines.map(text => ({ kind: 'del' as const, text }))
+  const cacheKey = oldLines.join('\u0000') + '\u0001' + newLines.join('\u0000')
+  const cached = lcsCache.get(cacheKey)
+  if (cached !== undefined) {
+    lcsCache.delete(cacheKey)
+    lcsCache.set(cacheKey, cached)
+    return cached
+  }
+  const compute = (): AlignOp[] => {
+    // Trivial sides (create / wipe) need no table: the answer is one-sided.
+    if (m === 0) return newLines.map(text => ({ kind: 'add' as const, text }))
+    if (n === 0) return oldLines.map(text => ({ kind: 'del' as const, text }))
   const w = n + 1
   const dp = new Uint32Array((m + 1) * w)
   for (let i = m - 1; i >= 0; i--) {
@@ -73,6 +91,14 @@ function lcsOps(oldLines: readonly string[], newLines: readonly string[]): Align
   while (j < n) {
     ops.push({ kind: 'add', text: newLines[j] })
     j += 1
+  }
+  return ops
+  }
+  const ops = compute()
+  lcsCache.set(cacheKey, ops)
+  if (lcsCache.size > LCS_CACHE_LIMIT) {
+    const oldest = lcsCache.keys().next().value
+    if (oldest !== undefined) lcsCache.delete(oldest)
   }
   return ops
 }
@@ -141,4 +167,39 @@ export function changedLineCounts(oldLines: readonly string[], newLines: readonl
 export function alignedHunkRows(oldLines: readonly string[], newLines: readonly string[]): AlignedRow[] | null {
   if (oldLines.length > ALIGN_MAX_SIDE_LINES || newLines.length > ALIGN_MAX_SIDE_LINES) return null
   return collapse(lcsOps(oldLines, newLines), CONTEXT_LINES)
+}
+
+/**
+ * Whether a hunk changes ONLY the raw text's terminator: identical content
+ * lines but with a trailing-newline difference ("a\n" → "a"). The line-LCS
+ * sees equal sides and would render a lone gap row with +0 −0 — the change
+ * is real (a file losing or gaining its final newline), so callers show a
+ * del/add pair for the final line instead.
+ * @param oldText - the pre-image raw text, null for creations.
+ * @param newText - the post-image raw text.
+ * @param oldLines - content lines of oldText.
+ * @param newLines - content lines of newText.
+ */
+export function terminatorOnly(
+  oldText: string | null,
+  newText: string,
+  oldLines: readonly string[],
+  newLines: readonly string[],
+): boolean {
+  if (oldText === null || oldText === newText) return false
+  if (oldLines.length !== newLines.length) return false
+  for (let i = 0; i < oldLines.length; i++) {
+    if (oldLines[i] !== newLines[i]) return false
+  }
+  return true
+}
+
+/** The rendered del/add pair for a terminator-only hunk (final line twice). */
+export function terminatorRows(oldLines: readonly string[], newLines: readonly string[]): AlignedRow[] {
+  const oldLast = oldLines[oldLines.length - 1] ?? ''
+  const newLast = newLines[newLines.length - 1] ?? oldLast
+  return [
+    { kind: 'del', text: oldLast },
+    { kind: 'add', text: newLast },
+  ]
 }

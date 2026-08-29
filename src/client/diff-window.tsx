@@ -10,7 +10,7 @@
 import { useMemo } from 'react'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import { contentLines } from './diff-contract.ts'
-import { alignedHunkRows } from './diff-align.ts'
+import { alignedHunkRows, terminatorOnly, terminatorRows } from './diff-align.ts'
 import css from './diff-window.module.css'
 
 /** One flattened body line and its role. */
@@ -42,7 +42,12 @@ function buildRows(diffs: readonly DiffHunk[]): { rows: readonly DiffRow[]; adde
     prevPath = diff.path
     const newLines = contentLines(diff.newText)
     const oldLines = diff.oldText === null ? [] : contentLines(diff.oldText)
-    const aligned = alignedHunkRows(oldLines, newLines)
+    let aligned = alignedHunkRows(oldLines, newLines)
+    if (aligned !== null && terminatorOnly(diff.oldText, diff.newText, oldLines, newLines)) {
+      // A trailing-newline-only change: line-equal under the LCS, but a real
+      // file change — render the del/add pair, never a bare gap row.
+      aligned = terminatorRows(oldLines, newLines)
+    }
     if (aligned === null) {
       // Over-budget sides: plain blocks, exactly the pre-alignment rendering;
       // the footer keeps the full block arithmetic to match.

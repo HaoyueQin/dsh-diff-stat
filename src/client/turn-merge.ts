@@ -16,6 +16,17 @@ import type { ChangedFile, TurnChangesTurnData } from './turn-changes.ts'
 export const EMPTY_CHANGED_FILES: readonly ChangedFile[] = []
 
 /**
+ * The merge/claim key of one path: a "./"-prefixed path, a separator-mixed
+ * path and its clean form are the same file and must collapse into one row,
+ * while the ORIGINAL path string stays as the display value (first-seen
+ * wins). Normalizes the './' prefix and separator direction only —
+ * absolute/relative mixing is left to the caller's fence.
+ */
+export function pathKey(path: string): string {
+  return path.replace(/[\\/]/g, '/').replace(/^\.\//, '')
+}
+
+/**
  * Files changed by one Turn data value, merged per path. Same-file entries
  * collapse into one row with hunks appended in settlement order, so a file
  * written and then edited in the same turn reads as one entry with combined
@@ -34,10 +45,11 @@ export function changesForClosing(
   const byPath = new Map<string, DiffHunk[]>()
   for (const entry of data.changed) {
     if (entry.seq > seq) continue
-    const existing = byPath.get(entry.path)
+    const key = pathKey(entry.path)
+    const existing = byPath.get(key)
     if (existing === undefined) {
       const diffs: DiffHunk[] = [...entry.diffs]
-      byPath.set(entry.path, diffs)
+      byPath.set(key, diffs)
       files.push({ path: entry.path, diffs })
     } else {
       existing.push(...entry.diffs)
@@ -72,8 +84,8 @@ export function claimFor(data: TurnChangesTurnData | undefined, seq: number): re
  */
 export function collectDispatchFiles(root: ToolCallBlock, into: ChangedFile[]): ChangedFile[] {
   const seen = new Set<string>()
-  const byPath = new Map<string, DiffHunk[]>()
-  const order: string[] = []
+  const byKey = new Map<string, DiffHunk[]>()
+  const order: string[] = [] // full first-seen path for display; key lookup by pathKey
   const visit = (block: ToolCallBlock): void => {
     for (const sub of block.subCalls) {
       if (seen.has(sub.callId)) continue
@@ -85,9 +97,10 @@ export function collectDispatchFiles(root: ToolCallBlock, into: ChangedFile[]): 
           if (hunks !== null) {
             markArgHunks(hunks)
             for (const hunk of hunks) {
-              const existing = byPath.get(hunk.path)
+              const key = pathKey(hunk.path)
+              const existing = byKey.get(key)
               if (existing === undefined) {
-                byPath.set(hunk.path, [hunk])
+                byKey.set(key, [hunk])
                 order.push(hunk.path)
               } else {
                 existing.push(hunk)
@@ -100,7 +113,7 @@ export function collectDispatchFiles(root: ToolCallBlock, into: ChangedFile[]): 
     }
   }
   visit(root)
-  for (const path of order) into.push({ path, diffs: byPath.get(path) ?? [] })
+  for (const path of order) into.push({ path, diffs: byKey.get(pathKey(path)) ?? [] })
   return into
 }
 
@@ -118,15 +131,18 @@ export function mergeChangedFiles(
 ): readonly ChangedFile[] {
   if (dispatch.length === 0) return native
   const out: ChangedFile[] = []
-  const byPath = new Map<string, DiffHunk[]>()
+  const byKey = new Map<string, DiffHunk[]>()
   for (const file of native) {
-    byPath.set(file.path, [...file.diffs])
-    out.push({ path: file.path, diffs: byPath.get(file.path) ?? [] })
+    const key = pathKey(file.path)
+    const cloned = [...file.diffs]
+    byKey.set(key, cloned)
+    out.push({ path: file.path, diffs: cloned })
   }
   for (const file of dispatch) {
-    const existing = byPath.get(file.path)
+    const key = pathKey(file.path)
+    const existing = byKey.get(key)
     if (existing === undefined) {
-      byPath.set(file.path, [...file.diffs])
+      byKey.set(key, [...file.diffs])
       out.push({ path: file.path, diffs: [...file.diffs] })
     } else {
       existing.push(...file.diffs)

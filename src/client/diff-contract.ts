@@ -11,7 +11,7 @@
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
-import { changedLineCounts } from './diff-align.ts'
+import { changedLineCounts, terminatorOnly } from './diff-align.ts'
 
 /** What the stock ui-tool rows pass to the `tool.call.toolview` keyed slots. */
 export interface ToolCallOwnerProps {
@@ -127,7 +127,12 @@ export function diffStats(diffs: readonly DiffHunk[]): DiffStats {
   for (const hunk of diffs) {
     const newLines = contentLines(hunk.newText)
     const oldLines = hunk.oldText === null ? [] : contentLines(hunk.oldText)
-    const counted = changedLineCounts(oldLines, newLines)
+    // A trailing-newline-only change ("a\n" → "a") is line-equal under the
+    // LCS but a real file change: count it as one del + one add so badges
+    // never read +0 −0 for a file that actually changed.
+    const counted = terminatorOnly(hunk.oldText, hunk.newText, oldLines, newLines)
+      ? { added: 1, removed: 1 }
+      : changedLineCounts(oldLines, newLines)
     if (counted === null) {
       added += newLines.length
       removed += oldLines.length
