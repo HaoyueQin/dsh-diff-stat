@@ -13,7 +13,7 @@ import { terminatorOnly, terminatorRows } from '../src/client/diff-align.ts'
 import { turnChangesDefinition } from '../src/client/turn-changes.ts'
 import { boostHunkWithContext, BOOST_CONTEXT_LINES } from '../src/client/context-boost.ts'
 import { callTimeDiffs, isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
-import { classifyCreate, createRefusalError } from '../src/undo-plan.ts'
+import { classifyCreate, createRefusalError, snapshotProbeFrom } from '../src/undo-plan.ts'
 
 const kinds = rows => rows.map(r => r.kind)
 const lines = text => text.split('\n')
@@ -128,6 +128,15 @@ assert.equal(changedLineCounts(big(1300), big(1300)), null)
   const termRows = terminatorRows(['a'], ['a'])
   assert.deepEqual(termRows, [{ kind: 'del', text: 'a' }, { kind: 'add', text: 'a' }])
   assert.deepEqual(changedLineCounts(['a'], ['a']), { added: 0, removed: 0 })
+}
+
+// 11h. Terminator-only ABOVE the alignment budget falls back to the same
+//      block arithmetic as the over-budget window (no badge/footer drift).
+{
+  const bigEqual = Array.from({ length: 1300 }, (_, i) => 'line' + i)
+  assert.equal(terminatorOnly(bigEqual.join('\n'), bigEqual.join('\n') + '\n', bigEqual, bigEqual), false)
+  const bigHunk = { path: 'big.ts', oldText: bigEqual.join('\n'), newText: bigEqual.join('\n') + '\n' }
+  assert.deepEqual(diffStats([bigHunk]), { added: 1300, removed: 1300 })
 }
 
 // 11f. diffStats over a mixed hunk list equals the rendered del/add rows
@@ -353,6 +362,13 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   assert.equal(classifyCreate(nothing, 'D:/ws/f.ts'), 'create')
   assert.ok(createRefusalError('overwrite').includes('existed before the turn'))
   assert.ok(createRefusalError('unverified').includes('no turn snapshot'))
+  // A truncated capture (hit the file cap) proves PRESENCE exactly but not
+  // ABSENCE: an unrecorded path must read unverified, never create.
+  const truncatedCap = snapshotProbeFrom({ files: new Set(['D:/ws/known.ts']), truncated: true })
+  assert.equal(classifyCreate(truncatedCap, 'D:/ws/known.ts'), 'overwrite')
+  assert.equal(classifyCreate(truncatedCap, 'D:/ws/missing.ts'), 'unverified')
+  const exactCap = snapshotProbeFrom({ files: new Set(['D:/ws/known.ts']), truncated: false })
+  assert.equal(classifyCreate(exactCap, 'D:/ws/missing.ts'), 'create')
 }
 
 // 12c. pathKey — "./a.ts" / "a\b.ts" / "a/b.ts" collapse to one row while
