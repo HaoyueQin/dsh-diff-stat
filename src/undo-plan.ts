@@ -12,8 +12,32 @@
 
 /** Whether one path existed when the owning turn's snapshot was taken. */
 export interface SnapshotProbe {
-  /** true = existed at snapshot time; false = absent; undefined = no snapshot for this turn. */
+  /** true = existed at snapshot time; false = absent; undefined = no snapshot / truncated record (no evidence either way). */
   has(path: string): boolean | undefined
+}
+
+/** One captured turn record: the existence set plus the truncated flag. */
+export interface SnapshotRecord {
+  readonly files: ReadonlySet<string>
+  /**
+   * True when the capture hit the file cap: recorded paths are exact, but
+   * ABSENCE proves nothing — a path omitted only because of the cap would
+   * otherwise classify as a create and be deleted.
+   */
+  readonly truncated: boolean
+}
+
+/**
+ * Build the probe for one captured record, or undefined when the turn has no
+ * snapshot. A truncated record answers undefined for an absent path (the
+ * conservative direction: refuse rather than risk deleting a pre-existing
+ * file); presence is exact in both cases.
+ */
+export function snapshotProbeFrom(record: SnapshotRecord | undefined): SnapshotProbe | undefined {
+  if (record === undefined) return undefined
+  return {
+    has: path => record.files.has(path) ? true : record.truncated ? undefined : false,
+  }
 }
 
 /** What undo may do with a create-shaped (oldText: null) hunk. */

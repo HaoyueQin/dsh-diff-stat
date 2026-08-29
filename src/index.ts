@@ -28,7 +28,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-import { classifyCreate, createRefusalError, type SnapshotProbe } from './undo-plan.ts'
+import { classifyCreate, createRefusalError, snapshotProbeFrom, type SnapshotProbe } from './undo-plan.ts'
 
 export const name = 'dsh-diff-stat'
 
@@ -238,12 +238,12 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
  */
 const SNAPSHOT_MAX_TURNS = 16
 const SNAPSHOT_MAX_FILES = 100_000
-const SNAPSHOT_MAX_DEPTH = 8
 const SNAPSHOT_SKIP_DIRS = new Set(['node_modules', '.git'])
 
 interface TurnSnapshot {
   readonly at: number
   readonly files: ReadonlySet<string>
+  readonly truncated: boolean
 }
 
 /** key = cwd + '\0' + turn; insertion order doubles as the LRU (evict oldest first). */
@@ -255,9 +255,7 @@ function snapshotKey(cwd: string, turn: number): string {
 
 /** The probe semantic undo needs: undefined turn → undefined answers. */
 function snapshotProbe(cwd: string, turn: number): SnapshotProbe | undefined {
-  const record = turnSnapshots.get(snapshotKey(cwd, turn))
-  if (record === undefined) return undefined
-  return { has: (path: string) => (record.files.has(path) ? true : false) }
+  return snapshotProbeFrom(turnSnapshots.get(snapshotKey(cwd, turn)))
 }
 
 /**
@@ -276,9 +274,19 @@ async function captureSnapshot(cwd: string, turn: unknown): Promise<{ ok: boolea
   } catch {
     return { ok: false, error: 'workspace not resolved' }
   }
+  // Idempotent: the first capture for a (cwd, turn) pair wins. A window reload
+  // re-running the start match must NOT re-capture at its later time, or a
+  // file created by the turn would look pre-existing and undo would refuse
+  // its deletion.
+  const existingKey = snapshotKey(cwd, turnNo)
+  if (turnSnapshots.has(existingKey)) return { ok: true, files: turnSnapshots.get(existingKey)!.files.size, truncated: turnSnapshots.get(existingKey)!.truncated }
   const files = new Set<string>()
   let truncated = false
-  const walk = async (dir: string, depth: number): Promise<void> => {
+  // Full tree, no depth cap: node_modules/.git are skipped and the file cap is
+  // the only bound — a path omitted by ANY depth limit would classify as a
+  // create and be deleted, which is the one wrong direction this guard must
+  // never take. Truncation is recorded and downgrades absence to unverified.
+  const walk = async (dir: string): Promise<void> => {
     if (truncated) return
     let entries
     try {
@@ -294,14 +302,14 @@ async function captureSnapshot(cwd: string, turn: unknown): Promise<{ ok: boolea
       if (SNAPSHOT_SKIP_DIRS.has(entry.name)) continue
       const full = join(dir, entry.name)
       if (entry.isDirectory()) {
-        if (depth < SNAPSHOT_MAX_DEPTH) await walk(full, depth + 1)
+        await walk(full)
         continue
       }
       if (entry.isFile()) files.add(full)
     }
   }
-  await walk(root, 0)
-  turnSnapshots.set(snapshotKey(cwd, turnNo), { at: Date.now(), files })
+  await walk(root)
+  turnSnapshots.set(existingKey, { at: Date.now(), files, truncated })
   while (turnSnapshots.size > SNAPSHOT_MAX_TURNS) {
     const oldest = turnSnapshots.keys().next().value
     if (oldest === undefined) break
