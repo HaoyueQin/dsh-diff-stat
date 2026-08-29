@@ -68,7 +68,6 @@ interface TurnChangesState extends TurnChangesTurnData {
     readonly name: string
     readonly argsRaw: string
   }>
-  readonly subCalls: ReadonlySet<string>
 }
 
 /**
@@ -83,24 +82,6 @@ function settledHunks(
 ): DiffHunk[] | null {
   if (call === undefined) return null
   return mutationHunks(call.name, call.argsRaw, meta)
-}
-
-/**
- * The mutation hunks a PTC `tool/code-dispatch` sub-call carries, derived
- * from its logged arguments (the dispatch bridge records no presentation
- * metadata). Returns null for errored, malformed, or non-mutation dispatches.
- */
-function dispatchHunks(data: Record<string, unknown>): DiffHunk[] | null {
-  // Official dispatch semantics (ui-conversation childResult): only an
-  // explicit true counts as errored; a missing flag is treated as success.
-  if (data.isError === true) return null
-  if (typeof data.rootCallId !== 'string' || data.rootCallId === '') return null
-  if (typeof data.subCallId !== 'string' || data.subCallId === '') return null
-  if (typeof data.name !== 'string' || typeof data.arguments !== 'string') return null
-  // Argument sanity lives inside callTimeDiffs (via mutationHunks): only the
-  // edit/write shapes map, anything else contributes nothing. Dispatch records
-  // carry no result meta, so the hunks come from the argument fallback alone.
-  return mutationHunks(data.name, data.arguments, null)
 }
 
 /**
@@ -168,7 +149,7 @@ export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedF
 /** The state a matched turn/start begins with. */
 function startState(match: ConversationMatch): TurnChangesState {
   if (match.event.type !== 'turn/start') throw new Error('diff-stat changes start requires turn/start')
-  return { turn: match.event.data.turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
+  return { turn: match.event.data.turn, calls: new Map(), changed: [], hasCodeDispatch: false }
 }
 
 /** One update folded into the state — the engine's update path and the
@@ -209,32 +190,14 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
   }
   const dispatch = codeDispatchData(match.event)
   if (dispatch !== null) {
-    const data = dispatch
-    const hunks = dispatchHunks(data)
-    if (hunks === null || hunks.length === 0) {
-      // PTC evidence stands on its own: a dispatch record exists only inside a
-      // run_code run, so this turn ran code dispatch even when the record's
-      // args shape yields no hunks here (the card joins those from the chat
-      // tool tree). Claiming without it would let a pagination boundary that
-      // dropped the run_code tool/call event hide the whole card while the
-      // inline badge rows — rebuilt from the same window by the stock
-      // fallbackState — stay visible.
-      return { ...state, hasCodeDispatch: true }
-    }
-    // Dedup key is the root+sub pair: replays and duplicate dispatch
-    // records must not double-count a file, and equal sub ids under
-    // different roots stay distinct.
-    const dedupeKey = String(data['rootCallId']) + '\u0000' + String(data['subCallId'])
-    if (state.subCalls.has(dedupeKey)) return state
-    const subCalls = new Set(state.subCalls)
-    subCalls.add(dedupeKey)
-    const path = hunks[0]?.path
-    if (path === undefined) return state
-    return {
-      ...state,
-      subCalls,
-      changed: [...state.changed, { seq: match.event.seq, path, diffs: hunks }],
-    }
+    // PTC evidence stands on its own: a dispatch record exists only inside a
+    // run_code run, so this turn ran code dispatch. Hunks NEVER come from the
+    // record's args here — the wire carries an arguments OBJECT on both
+    // supported kernel generations (verified against the 0.1.1-rc.2 and
+    // 0.1.2-alpha.1 fixtures), and the card joins the files from the chat
+    // tool tree. Deriving hunks from a string form would double-count with
+    // that join, so the record contributes evidence only.
+    return { ...state, hasCodeDispatch: true }
   }
   return state
 }
@@ -265,7 +228,7 @@ function matchTurn(match: ConversationMatch): number | undefined {
  * whose tool/call settled outside the window cannot contribute, and older
  * pages arriving later enlarge the fold).
  */
-function foldMatches(matches: readonly ConversationMatch[]): TurnChangesState | undefined {
+function foldMatches(matches: readonly ConversationMatch[], contextTurn?: number): TurnChangesState | undefined {
   let state: TurnChangesState | undefined
   for (const match of matches) {
     if (match.role === 'start') {
@@ -274,11 +237,16 @@ function foldMatches(matches: readonly ConversationMatch[]): TurnChangesState | 
     }
     if (state === undefined) {
       // Window-start match may be any event type; only the turn coordinate
-      // seeds the fold — read it from the engine's Location (authoritative
-      // for wire records without a turn field) with the event field fallback.
-      const turn = matchTurn(match)
+      // seeds the fold — the engine Location (authoritative for wire records
+      // without a turn field), then the event's own field, then the Context
+      // id this match was routed under. The LAST one is the only guaranteed
+      // coordinate for a window-start dispatch record: the runtime Location
+      // index resolves a coordinate-less event to 'session' (verified
+      // against the 0.1.1-rc.2 client-runtime), so Location alone would
+      // fall through exactly when it is needed most.
+      const turn = matchTurn(match) ?? contextTurn
       if (turn === undefined) continue
-      state = { turn, calls: new Map(), subCalls: new Set(), changed: [], hasCodeDispatch: false }
+      state = { turn, calls: new Map(), changed: [], hasCodeDispatch: false }
     }
     state = applyUpdateState(state, match)
   }
@@ -302,7 +270,13 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
       // disappears.
       const learnedTurn = event.data.turn
       if (typeof learnedTurn === 'number' && event.data.callId) {
-        if (rootCallTurn.size >= ROOT_CALL_TURN_LIMIT) rootCallTurn.clear()
+        if (rootCallTurn.size >= ROOT_CALL_TURN_LIMIT) {
+          // Evict the oldest entry only: clearing everything would drop every
+          // live root mapping in a long session and disable dispatch routing
+          // until the next tool/call arrives.
+          const oldest = rootCallTurn.keys().next().value
+          if (oldest !== undefined) rootCallTurn.delete(oldest)
+        }
         rootCallTurn.set(String(event.data.callId), learnedTurn)
       }
       return { id: String(event.data.turn), role: 'update' }
@@ -334,7 +308,14 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
   // data and keeps the card visible for turns the window truncates.
   buildLocationData: (context, scope) => {
     if (scope !== 'turn') return null
-    const state = foldMatches(context.matches)
+    // Every match this Definition routes shares the id String(turn), so the
+    // Context id is the authoritative turn seed when the window starts with
+    // a dispatch record (see foldMatches).
+    const contextTurn = Number(context.id)
+    const state = foldMatches(
+      context.matches,
+      Number.isInteger(contextTurn) && contextTurn >= 1 ? contextTurn : undefined,
+    )
     return state === undefined
       ? null
       : {
