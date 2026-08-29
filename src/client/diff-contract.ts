@@ -129,10 +129,14 @@ export function diffStats(diffs: readonly DiffHunk[]): DiffStats {
     const oldLines = hunk.oldText === null ? [] : contentLines(hunk.oldText)
     // A trailing-newline-only change ("a\n" → "a") is line-equal under the
     // LCS but a real file change: count it as one del + one add so badges
-    // never read +0 −0 for a file that actually changed.
-    const counted = terminatorOnly(hunk.oldText, hunk.newText, oldLines, newLines)
-      ? { added: 1, removed: 1 }
-      : changedLineCounts(oldLines, newLines)
+    // never read +0 −0 for a file that actually changed. An EMPTY creation
+    // (oldText null, newText '') likewise reads one added line — a file
+    // appeared, even with zero content rows.
+    const counted = hunk.oldText === null && hunk.newText === ''
+      ? { added: 1, removed: 0 }
+      : terminatorOnly(hunk.oldText, hunk.newText, oldLines, newLines)
+        ? { added: 1, removed: 1 }
+        : changedLineCounts(oldLines, newLines)
     if (counted === null) {
       added += newLines.length
       removed += oldLines.length

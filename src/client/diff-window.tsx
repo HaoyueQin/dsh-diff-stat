@@ -11,6 +11,7 @@ import { useMemo } from 'react'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import { contentLines } from './diff-contract.ts'
 import { alignedHunkRows, terminatorOnly, terminatorRows } from './diff-align.ts'
+import { pathKey } from './turn-merge.ts'
 import css from './diff-window.module.css'
 
 /** One flattened body line and its role. */
@@ -29,17 +30,28 @@ function buildRows(diffs: readonly DiffHunk[]): { rows: readonly DiffRow[]; adde
   const paths = new Set<string>()
   let added = 0
   let removed = 0
-  let prevPath: string | undefined
+  let prevKey: string | undefined
   for (const diff of diffs) {
-    paths.add(diff.path)
-    if (diff.path !== prevPath) {
+    // Path grouping follows the same normalized key the card's merge uses,
+    // so a "'./a.ts' + 'a.ts'" pair is ONE file here too (showing the first
+    // raw path, like the card row does).
+    const key = pathKey(diff.path)
+    paths.add(key)
+    if (key !== prevKey) {
       rows.push({ kind: 'path', text: diff.path })
     } else if (rows[rows.length - 1]?.kind !== 'gap') {
       // Same file again: separate hunks unless the previous hunk's fold
       // already ended in a gap row (two ⋯ lines in a row read as one).
       rows.push({ kind: 'gap', text: '⋯' })
     }
-    prevPath = diff.path
+    prevKey = key
+    // Empty creation (a file that appeared with no content rows): render one
+    // added row so the window and the badge agree on "a new file, 1 line".
+    if (diff.oldText === null && diff.newText === '') {
+      rows.push({ kind: 'add', text: '' })
+      added += 1
+      continue
+    }
     const newLines = contentLines(diff.newText)
     const oldLines = diff.oldText === null ? [] : contentLines(diff.oldText)
     let aligned = alignedHunkRows(oldLines, newLines)

@@ -264,11 +264,18 @@ export function TurnCard(props: TurnCardProps) {
 
   return (
     <div className={css.card} data-diff-stat-card="">
-      <button
-        type="button"
+      <div
         className={css.header}
-        onClick={() => { setExpanded(v => !v) }}
+        role="button"
+        tabIndex={0}
         aria-expanded={expanded}
+        onClick={() => { setExpanded(v => !v) }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault()
+            setExpanded(v => !v)
+          }
+        }}
       >
         <span className={css.chevron + (expanded ? ' ' + css.chevronOpen : '')} aria-hidden>
           <IconChevronRightOutline14 size={12} />
@@ -289,7 +296,7 @@ export function TurnCard(props: TurnCardProps) {
             {undoState === 'busy' ? t('card.undoing') : undoState === 'done' ? t('card.undone') : undoState === 'error' ? t('card.undoFailed') : '↶ ' + t('card.undo')}
           </button>
         )}
-      </button>
+      </div>
       {expanded && (
         <div className={css.list}>
           {allFiles.map(file => {
