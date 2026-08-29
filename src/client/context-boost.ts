@@ -22,11 +22,6 @@ const CACHE_CAP = 16
 /** Module-side content cache: cwd-fenced path → full text. */
 const cache = new Map<string, string>()
 
-/** Forget every cached file read (the cache is otherwise a private detail). */
-export function clearBoostCache(): void {
-  cache.clear()
-}
-
 /** Read one file through the host half, LRU-cached; null when unavailable. */
 async function readCached(path: string, cwd: string | undefined): Promise<string | null> {
   const key = (cwd ?? '') + '\0' + path
@@ -58,13 +53,21 @@ async function readCached(path: string, cwd: string | undefined): Promise<string
 export function boostHunkWithContext(hunk: DiffHunk, fileLines: readonly string[]): DiffHunk | null {
   const newLines = contentLines(hunk.newText)
   if (newLines.length === 0) return null
+  // The fragment must sit in the file EXACTLY once: duplicated content (a
+  // snippet copied across a template) has no single anchor, and anchoring the
+  // first occurrence would surround the wrong region with context.
   let at = -1
-  outer: for (let i = 0; i + newLines.length <= fileLines.length; i++) {
+  for (let i = 0; i + newLines.length <= fileLines.length; i++) {
+    let matches = true
     for (let j = 0; j < newLines.length; j++) {
-      if (fileLines[i + j] !== newLines[j]) continue outer
+      if (fileLines[i + j] !== newLines[j]) {
+        matches = false
+        break
+      }
     }
+    if (!matches) continue
+    if (at !== -1) return null
     at = i
-    break
   }
   if (at === -1) return null
   const before = fileLines.slice(Math.max(0, at - BOOST_CONTEXT_LINES), at)
