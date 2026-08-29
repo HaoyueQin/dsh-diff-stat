@@ -34,11 +34,13 @@ const PLUGIN_ID = 'dsh-diff-stat'
 /** Host-half packages resolved by the harness at runtime — never inlined. */
 const LIB_EXTERNALS = ['@deepseek-ai/cordis', '@deepseek-ai/dsh-atomic-write'] as const
 
-/** Module specifiers the dsh web shell shares into its frozen module table. */
+/** Module specifiers the dsh web shell shares into its frozen module table
+ *  — exactly the runtime imports the client half makes (imports of a table
+ *  entry would throw the purity gate below; listing an unused entry would
+ *  silently hide a future accidental import of a shareable module). */
 const PLATFORM_MODULES = [
-  'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client', 'cordis',
+  'react', 'react/jsx-runtime',
   '@deepseek-ai/dsh-client-ui-slots',
-  '@deepseek-ai/dsh-client-web-react',
   '@deepseek-ai/dsh-client-ui-primitives',
 ] as const
 
@@ -104,18 +106,18 @@ const clientBundle: UserConfig = {
     name: 'dsh-css-modules-inline',
     resolveId(source: string, importer: string | undefined) {
       if (!source.endsWith('.module.css')) return null
-      const abs = source.startsWith('@')
-        ? source
-        : importer !== undefined ? resolve(dirname(importer), source) : source
-      const display = source.startsWith('@')
-        ? abs
-        : relative(PROJECT_ROOT, abs).replaceAll('\\', '/')
+      if (importer === undefined) return null
+      // All CSS imports in this bundle are project-relative (no alias config);
+      // resolving against the importer keeps the virtual id project-relative
+      // and the emitted artifact byte-stable across machines.
+      const abs = resolve(dirname(importer), source)
+      const display = relative(PROJECT_ROOT, abs).replaceAll('\\', '/')
       return CSS_VIRTUAL_PREFIX + display + CSS_VIRTUAL_SUFFIX
     },
     async load(virtualId: string) {
       if (!virtualId.startsWith(CSS_VIRTUAL_PREFIX)) return null
       const raw = virtualId.slice(CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
-      const fileId = raw.startsWith('@') ? require.resolve(raw) : resolve(PROJECT_ROOT, raw)
+      const fileId = resolve(PROJECT_ROOT, raw)
       this.addWatchFile(fileId)
       const source = await readFile(fileId)
       const { code, exports: cssExports } = transform({
