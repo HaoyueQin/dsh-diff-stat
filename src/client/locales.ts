@@ -26,7 +26,7 @@ export const zh = {
   'peek.readFailed': '读取失败',
   'peek.binary': '二进制文件（{size} 字节），无法预览',
   'peek.bytes': '{size} 字节',
-  'peek.truncated': '已截断（前 512 KiB）',
+  'peek.truncated': '已截断（读取上限内的前段）',
   'peek.close': '关闭',
 }
 
@@ -53,7 +53,7 @@ export const en: Record<DiffStatKey, string> = {
   'peek.readFailed': 'Read failed',
   'peek.binary': 'Binary file ({size} bytes); no preview',
   'peek.bytes': '{size} bytes',
-  'peek.truncated': 'truncated (first 512 KiB)',
+  'peek.truncated': 'truncated (head of the read cap)',
   'peek.close': 'Close',
 }
 

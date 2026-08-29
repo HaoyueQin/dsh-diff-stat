@@ -1,23 +1,16 @@
 /**
  * The bounded inline file view (打开 ▾ → 内嵌查看): the file's text content in
- * a height-capped window with the stock DiffBlock collapse pattern — head
- * ceil(maxLines/2) + tail rest, a "… 其余 N 行" expander, and a 收起 button.
- * Content comes from the host half's fenced files.read; binary and oversized
- * files degrade to explicit notes.
+ * a height-capped window whose max-height + scroll is the bound (the same
+ * contract as the diff window). Content comes from the host half's fenced
+ * files.read; binary and oversized files degrade to explicit notes.
  */
 import { useEffect, useState } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { hostCall } from './api.ts'
 import { CloseIcon } from './icons.tsx'
 import { NS } from './locales.ts'
+import { contentLines } from './diff-contract.ts'
 import css from './file-peek.module.css'
-
-/** Split text into content lines (trailing newline is a terminator, not a blank line). */
-function contentLines(text: string): readonly string[] {
-  if (text === '') return []
-  const body = text.endsWith('\n') ? text.slice(0, -1) : text
-  return body.split('\n')
-}
 
 /** Full props of the bounded file view. */
 export type FilePeekProps = {
@@ -29,7 +22,7 @@ export type FilePeekProps = {
 
 type PeekState =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'error'; readonly message: string }
+  | { readonly kind: 'error'; readonly key: 'hostUnavailable' | 'readFailed'; readonly detail?: string }
   | { readonly kind: 'binary'; readonly size: number }
   | { readonly kind: 'text'; readonly content: string; readonly truncated: boolean; readonly size: number }
 
@@ -48,11 +41,13 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
       const result = await hostCall<{ kind: string; content?: string; truncated?: boolean; size?: number; error?: string }>('files.read', { cwd, path })
       if (!alive) return
       if (result === null) {
-        setState({ kind: 'error', message: t('peek.hostUnavailable') })
+        // Store the message KEY, not the translated text: a locale switch
+        // after the fetch must re-render the message in the new language.
+        setState({ kind: 'error', key: 'hostUnavailable' })
       } else if (result.kind === 'binary') {
         setState({ kind: 'binary', size: result.size ?? 0 })
       } else if (typeof result.content !== 'string') {
-        setState({ kind: 'error', message: result.error ?? t('peek.readFailed') })
+        setState({ kind: 'error', key: 'readFailed', detail: result.error })
       } else {
         setState({ kind: 'text', content: result.content, truncated: result.truncated === true, size: result.size ?? 0 })
       }
@@ -72,7 +67,10 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
     return (
       <div className={css.peek} data-diff-stat-peek="">
         <div className={css.bar}><span className={css.barText}>{path}</span><button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}><CloseIcon /></button></div>
-        <div className={css.note}>{t('peek.readFailed')}：{state.message}</div>
+        <div className={css.note}>
+          {state.key === 'hostUnavailable' ? t('peek.hostUnavailable') : t('peek.readFailed')}
+          {state.detail !== undefined && <span className={css.detail}>：{state.detail}</span>}
+        </div>
       </div>
     )
   }

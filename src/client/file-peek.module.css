@@ -57,20 +57,3 @@
 	color: var(--dsw-alias-label-primary);
 }
 
-.expand {
-	display: block;
-	width: 100%;
-	border: none;
-	border-top: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));
-	background: transparent;
-	color: var(--dsw-alias-label-secondary);
-	font: inherit;
-	padding: 3px 8px;
-	cursor: pointer;
-	text-align: center;
-}
-
-.expand:hover {
-	color: var(--dsw-alias-label-primary);
-	background: var(--dsw-alias-fill-hover, rgba(127, 127, 127, 0.08));
-}
