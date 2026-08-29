@@ -361,7 +361,7 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   assert.equal(classifyCreate(existed, 'D:/ws/g.ts'), 'create')
   assert.equal(classifyCreate(nothing, 'D:/ws/f.ts'), 'create')
   assert.ok(createRefusalError('overwrite').includes('existed before the turn'))
-  assert.ok(createRefusalError('unverified').includes('no turn snapshot'))
+  assert.ok(createRefusalError('unverified').includes('no or incomplete turn snapshot'))
   // A truncated capture (hit the file cap) proves PRESENCE exactly but not
   // ABSENCE: an unrecorded path must read unverified, never create.
   const truncatedCap = snapshotProbeFrom({ files: new Set(['D:/ws/known.ts']), truncated: true })
@@ -369,6 +369,11 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   assert.equal(classifyCreate(truncatedCap, 'D:/ws/missing.ts'), 'unverified')
   const exactCap = snapshotProbeFrom({ files: new Set(['D:/ws/known.ts']), truncated: false })
   assert.equal(classifyCreate(exactCap, 'D:/ws/missing.ts'), 'create')
+  // .git paths are never captured: absence there must read unverified.
+  assert.equal(classifyCreate(exactCap, 'D:/ws/.git/COMMIT_MSG_TMP'), 'unverified')
+  assert.equal(classifyCreate(exactCap, 'D:/ws/sub/.git/x'), 'unverified')
+  assert.equal(classifyCreate(exactCap, 'D:/ws/.gitignore'), 'create')
+  assert.equal(classifyCreate(exactCap, 'D:\\ws\\.git\\COMMIT_MSG_TMP'), 'unverified')
 }
 
 // 12c. pathKey — "./a.ts" / "a\b.ts" / "a/b.ts" collapse to one row while

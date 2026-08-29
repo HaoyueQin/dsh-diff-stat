@@ -57,3 +57,7 @@
 	color: var(--dsw-alias-label-primary);
 }
 
+
+.detail {
+	opacity: 0.75;
+}
