@@ -102,6 +102,25 @@ const clientBundle: UserConfig = {
       )
     },
   }, {
+    // Bundled node_modules modules carry ABSOLUTE //#region paths (the parent
+    // package location of the build machine) in the emitted artifact; without
+    // normalization the committed lib/ differs per checkout, breaking the
+    // byte-stable contract and the CI lib-diff gate.
+    name: 'dsh-relative-region-labels',
+    renderChunk(code: string): string | undefined {
+      const root = PROJECT_ROOT.replaceAll('\\', '/')
+      let changed = false
+      const normalized = code.replace(/#region ([^\n]+)/g, (whole, raw: string) => {
+        const norm = raw.replaceAll('\\', '/')
+        if (norm.startsWith(root + '/')) {
+          changed = true
+          return '#region ' + norm.slice(root.length + 1)
+        }
+        return whole
+      })
+      return changed ? normalized : undefined
+    },
+  }, {
     // CSS Modules → hashed class map + one injected <style data-plugin> tag.
     name: 'dsh-css-modules-inline',
     resolveId(source: string, importer: string | undefined) {
