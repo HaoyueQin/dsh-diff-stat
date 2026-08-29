@@ -28,6 +28,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm check:align
       - run: pnpm build
+      # A tag named vX.Y.Z must carry package.json version X.Y.Z, or the
+      # release ships assets whose metadata names a different version than
+      # the tag points at.
+      - run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
       - run: git diff --exit-code -- lib/
       - name: Pack tarball
         run: |
@@ -36,8 +40,10 @@ jobs:
           # Versioned asset plus a fixed-name copy: the marketplace tarball:
           # field points at releases/latest/download/<fixed>.tgz, which must
           # keep resolving to the newest build across versions. Select the
-          # versioned file by name shape (not by unsorted directory order).
-          TARBALL="dist/$(ls dist | grep -E '^dsh-diff-stat-[0-9].*\.tgz$' | head -1)"
+          # versioned file by name shape with an EXACTLY-ONE check (ls +
+          # head-1 takes lexicographic order and would mis-pick 0.10.x over
+          # 0.9.x once multiple versions coexist in dist).
+          TARBALL="$(node -e 'const fs=require("fs");const vs=fs.readdirSync("dist").filter(f=>/^dsh-diff-stat-[0-9]+\.[0-9]+\.[0-9]+[^.]*\.tgz$/.test(f));if(vs.length!==1){console.error("expected exactly one versioned tarball, got "+vs.length+": "+vs.join(","));process.exit(1)}console.log("dist/"+vs[0])')"
           if [ -z "$TARBALL" ]; then echo "versioned tarball not found"; exit 1; fi
           cp "$TARBALL" dist/dsh-diff-stat.tgz
           echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"

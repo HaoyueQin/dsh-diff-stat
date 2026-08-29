@@ -2,7 +2,33 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - 'v*'
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tsdown.config.ts'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ci.yml'
   pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'scripts/**'
+      - 'tsdown.config.ts'
+      - 'tsconfig.json'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/ci.yml'
+
+# Cancel a superseded run when a newer push lands on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
