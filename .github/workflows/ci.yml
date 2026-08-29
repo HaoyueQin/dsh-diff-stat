@@ -12,6 +12,7 @@ on:
       - 'tsconfig.json'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'lib/**'
       - '.github/workflows/ci.yml'
   pull_request:
     branches:

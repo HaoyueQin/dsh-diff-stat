@@ -43,7 +43,7 @@ jobs:
           # versioned file by name shape with an EXACTLY-ONE check (ls +
           # head-1 takes lexicographic order and would mis-pick 0.10.x over
           # 0.9.x once multiple versions coexist in dist).
-          TARBALL="$(node -e 'const fs=require("fs");const vs=fs.readdirSync("dist").filter(f=>/^dsh-diff-stat-[0-9]+\.[0-9]+\.[0-9]+[^.]*\.tgz$/.test(f));if(vs.length!==1){console.error("expected exactly one versioned tarball, got "+vs.length+": "+vs.join(","));process.exit(1)}console.log("dist/"+vs[0])')"
+          TARBALL="$(node -e 'const fs=require("fs");const vs=fs.readdirSync("dist").filter(f=>/^dsh-diff-stat-[0-9]+\.[0-9]+\.[0-9]+(?:-[^\.]+(?:\.[^\.]+)*)?\.tgz$/.test(f));if(vs.length!==1){console.error("expected exactly one versioned tarball, got "+vs.length+": "+vs.join(","));process.exit(1)}console.log("dist/"+vs[0])')"
           if [ -z "$TARBALL" ]; then echo "versioned tarball not found"; exit 1; fi
           cp "$TARBALL" dist/dsh-diff-stat.tgz
           echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
