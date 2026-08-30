@@ -2,6 +2,13 @@
 
 [English](README.md) | [中文](README.zh.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-zh-dark.svg">
+    <img src="docs/banner-zh.svg" alt="DSH Diff Stat" width="720">
+  </picture>
+</p>
+
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![dsh plugin](https://img.shields.io/badge/dsh-plugin-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat) [![npm downloads](https://img.shields.io/npm/dt/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat)
@@ -13,6 +20,10 @@
 [![Last commit](https://img.shields.io/github/last-commit/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/commits)
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 插件，将智能体的文件变更可视化：变更工具行内联 **+N −M** 徽标、轮末文件变更汇总卡、点击展开对齐后的完整 diff。原生 `edit`/`write` 调用、极简预设的 `str_replace_editor`、Code Dispatch（PTC）子调用全链路覆盖。不依赖 git，不依赖任何第三方插件。
+
+<p align="center">
+  <img src="docs/demo-zh.svg" alt="demo" width="720">
+</p>
 
 ## 功能
 

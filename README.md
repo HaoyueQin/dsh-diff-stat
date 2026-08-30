@@ -2,6 +2,13 @@
 
 [English](README.md) | [中文](README.zh.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.svg">
+    <img src="docs/banner.svg" alt="DSH Diff Stat" width="720">
+  </picture>
+</p>
+
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![dsh plugin](https://img.shields.io/badge/dsh-plugin-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat) [![npm downloads](https://img.shields.io/npm/dt/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat)
@@ -13,6 +20,10 @@
 [![Last commit](https://img.shields.io/github/last-commit/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/commits)
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin that visualizes agent file changes: inline **+N −M** badges on mutation tool rows, a per-turn file-change summary card, and full aligned diffs on click. Covers native `edit`/`write` calls, the minimal preset's `str_replace_editor`, and Code Dispatch (PTC) sub-calls end to end. No git dependency, no third-party plugin dependencies.
+
+<p align="center">
+  <img src="docs/demo.svg" alt="demo" width="720">
+</p>
 
 ## Features
 

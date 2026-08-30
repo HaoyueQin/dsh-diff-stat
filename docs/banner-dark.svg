@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <title>DSH Diff Stat — inline +N −M badges, per-turn change cards, aligned diffs</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c111d"/><stop offset="1" stop-color="#131b2e"/>
+    </linearGradient>
+    <radialGradient id="blobIndigo"><stop offset="0" stop-color="#2c4a8f" stop-opacity=".4"/><stop offset="1" stop-color="#2c4a8f" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blobViolet"><stop offset="0" stop-color="#47317d" stop-opacity=".38"/><stop offset="1" stop-color="#47317d" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blobTeal"><stop offset="0" stop-color="#1d3a5f" stop-opacity=".45"/><stop offset="1" stop-color="#1d3a5f" stop-opacity="0"/></radialGradient>
+    <linearGradient id="logo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4D6BFE"/><stop offset="1" stop-color="#8A9CF5"/></linearGradient>
+    <linearGradient id="tg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6f8dff"/><stop offset="1" stop-color="#9db1ff"/></linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/><stop offset=".5" stop-color="#ffffff" stop-opacity=".16"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="cardSh" x="-20%" y="-25%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#000000" flood-opacity=".45"/>
+    </filter>
+    <clipPath id="cardClip"><rect x="706" y="28" width="450" height="248" rx="16"/></clipPath>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <circle cx="1010" cy="40" r="250" fill="url(#blobIndigo)"/>
+  <circle cx="620" cy="310" r="220" fill="url(#blobViolet)"/>
+  <circle cx="120" cy="290" r="230" fill="url(#blobTeal)"/>
+
+  <!-- logo: diff window on the dsh-blue tile -->
+  <rect x="64" y="78" width="56" height="56" rx="14" fill="url(#logo)"/>
+  <rect x="76" y="92" width="32" height="28" rx="5" fill="#ffffff" fill-opacity=".95"/>
+  <rect x="80" y="97" width="24" height="4" rx="2" fill="#2fae57"/>
+  <rect x="80" y="104" width="15" height="4" rx="2" fill="#e5544a"/>
+  <rect x="80" y="111" width="20" height="4" rx="2" fill="#c3cbd8"/>
+
+  <text x="140" y="118" font-size="45" font-weight="750" letter-spacing="-0.5" fill="#e8eef7">DSH <tspan fill="url(#tg)">Diff Stat</tspan></text>
+  <text x="142" y="155" font-size="17" fill="#c5cfdc">Inline +N −M badges · per-turn change cards · aligned diffs</text>
+  <text x="142" y="182" font-size="14" fill="#8fa0b5">A DeepSeek Harness Web plugin · No git required · zh/en</text>
+  <rect x="142" y="200" width="334" height="32" rx="8" fill="#ffffff" fill-opacity=".07" stroke="#ffffff" stroke-opacity=".16"/>
+  <text x="156" y="220" font-size="12" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#ccd8e6">dsh plugin --profile web add dsh-diff-stat</text>
+
+  <!-- glass card stack -->
+  <g>
+    <rect x="706" y="28" width="450" height="248" rx="16" fill="#ffffff" fill-opacity=".06" stroke="#ffffff" stroke-opacity=".15" stroke-width="1.5" filter="url(#cardSh)"/>
+
+    <!-- taken-over tool row -->
+    <path transform="translate(726,62)" d="M0 10l.9-3L7.5.4a1.4 1.4 0 0 1 2 2L2.9 9.1 0 10z" fill="#97a4b8"/>
+    <text x="748" y="73" font-size="13" fill="#97a4b8">Write</text>
+    <text x="806" y="73" font-size="13" font-weight="600" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#e6edf3">hello.rs</text>
+    <text x="1134" y="73" font-size="13.5" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-weight="600"><tspan fill="#5ec57d">+43</tspan><tspan fill="#f47067"> −11</tspan></text>
+
+    <!-- aligned diff window -->
+    <rect x="722" y="94" width="418" height="106" rx="10" fill="#0b1120" fill-opacity=".55" stroke="#ffffff" stroke-opacity=".1"/>
+    <text x="736" y="114" font-size="10.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#8b98ad">D:\Project\test\dsh\hello.rs</text>
+    <rect x="728" y="122" width="406" height="19" rx="3" fill="#f85149" fill-opacity=".14"/>
+    <text x="738" y="135.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#ff9d96">- fn greet(name: &amp;str) -&gt; &amp;str { "v1" }</text>
+    <rect x="728" y="143" width="406" height="19" rx="3" fill="#3fb950" fill-opacity=".15"/>
+    <text x="738" y="156.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">+ fn greet(name: &amp;str) -&gt; String {</text>
+    <rect x="728" y="164" width="406" height="19" rx="3" fill="#3fb950" fill-opacity=".15"/>
+    <text x="738" y="177.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">+     format!("Hello, {name}")</text>
+    <text x="736" y="196" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#97a4b8">└ <tspan fill="#5ec57d">+43</tspan><tspan fill="#f47067"> −11</tspan> · 1 file</text>
+
+    <!-- per-turn summary bar; the total counts up live -->
+    <rect x="722" y="208" width="418" height="32" rx="8" fill="#ffffff" fill-opacity=".05" stroke="#ffffff" stroke-opacity=".1"/>
+    <path d="M732 221l4.2 4.2 4.2-4.2" fill="none" stroke="#97a4b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="750" y="228" font-size="12.5" font-weight="600" fill="#e6edf3">2 files changed</text>
+    <text x="872" y="228" font-size="13" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-weight="600"><tspan fill="#5ec57d">+24</tspan><tspan fill="#f47067"> −11</tspan><animate attributeName="opacity" dur="6s" repeatCount="indefinite" keyTimes="0;0.2;0.283;0.955;1" values="1;1;0;0;1"/></text>
+    <text x="872" y="228" font-size="13" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-weight="600" opacity="0"><tspan fill="#5ec57d">+61</tspan><tspan fill="#f47067"> −11</tspan><animate attributeName="opacity" dur="6s" repeatCount="indefinite" keyTimes="0;0.2;0.283;0.467;0.55;1" values="0;0;1;1;0;0"/></text>
+    <text x="872" y="228" font-size="13" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-weight="600" opacity="0"><tspan fill="#5ec57d">+88</tspan><tspan fill="#f47067"> −11</tspan><animate attributeName="opacity" dur="6s" repeatCount="indefinite" keyTimes="0;0.467;0.55;0.955;1" values="0;0;1;1;0"/></text>
+    <rect x="1088" y="213" width="42" height="22" rx="6" fill="#4D6BFE" fill-opacity=".2" stroke="#8da0f5" stroke-opacity=".45"/>
+    <text x="1109" y="228" font-size="11.5" text-anchor="middle" fill="#9fb0ff">Undo</text>
+
+    <!-- second changed file, muted row -->
+    <path transform="translate(728,248) scale(0.75)" fill="#519aba" d="M22.27 19.385H1.73A1.73 1.73 0 010 17.655V6.345a1.73 1.73 0 011.73-1.73h20.54A1.73 1.73 0 0124 6.345v11.308a1.73 1.73 0 01-1.73 1.731zM5.769 15.923v-4.5l2.308 2.885 2.307-2.885v4.5h2.308V8.078h-2.308l-2.307 2.885-2.308-2.885H3.46v7.847zM21.232 12h-2.309V8.077h-2.307V12h-2.308l3.461 4.039z"/>
+    <text x="754" y="261" font-size="12" font-weight="600" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#d5dee9">README.md</text>
+    <text x="844" y="261" font-size="10.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7d8ba0">D:\Project\test\dsh\dsh-diff-test</text>
+    <text x="1134" y="261" font-size="12" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" font-weight="600"><tspan fill="#5ec57d">+45</tspan><tspan fill="#f47067"> −0</tspan></text>
+
+    <!-- glass sheen sweep -->
+    <g clip-path="url(#cardClip)">
+      <g>
+        <animateTransform attributeName="transform" type="translate" dur="6s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.05;0.27;1" keySplines="0 0 1 1;0.25 0.1 0.75 1;0 0 1 1" values="-330 0;-330 0;390 0;390 0"/>
+        <rect x="860" y="-50" width="140" height="400" fill="url(#shine)" opacity=".9" transform="rotate(18 930 150)"/>
+      </g>
+    </g>
+  </g>
+</svg>
