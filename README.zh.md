@@ -9,6 +9,8 @@
 ![platform](https://img.shields.io/badge/platform-web-8A9CF5?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-success?style=flat-square)
+[![Commit activity](https://img.shields.io/github/commit-activity/t/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/graphs/commit-activity)
+[![Last commit](https://img.shields.io/github/last-commit/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/commits)
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 插件，将智能体的文件变更可视化：变更工具行内联 **+N −M** 徽标、轮末文件变更汇总卡、点击展开对齐后的完整 diff。原生 `edit`/`write` 调用、极简预设的 `str_replace_editor`、Code Dispatch（PTC）子调用全链路覆盖。不依赖 git，不依赖任何第三方插件。
 
@@ -75,6 +77,10 @@ pnpm check:align    # 对齐引擎与数据模型断言（需 Node >= 23.6）
 > （`narrowDiffs`、快照探测），其消费的 wire 数据在两版逐字节一致。未来
 > 内核若改名或删除这些 wire 字段，`tsc` 不会报错 —— 发版前请对新内核
 > 实测验证。
+
+## Activity
+
+[![HaoyueQin/dsh-diff-stat GitStock K-Line Chart](https://gitstock.org/HaoyueQin/dsh-diff-stat/stock.svg)](https://gitstock.org/HaoyueQin/dsh-diff-stat)
 
 ## License
 

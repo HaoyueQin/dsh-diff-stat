@@ -9,6 +9,8 @@
 ![platform](https://img.shields.io/badge/platform-web-8A9CF5?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-success?style=flat-square)
+[![Commit activity](https://img.shields.io/github/commit-activity/t/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/graphs/commit-activity)
+[![Last commit](https://img.shields.io/github/last-commit/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/commits)
 
 A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin that visualizes agent file changes: inline **+N −M** badges on mutation tool rows, a per-turn file-change summary card, and full aligned diffs on click. Covers native `edit`/`write` calls, the minimal preset's `str_replace_editor`, and Code Dispatch (PTC) sub-calls end to end. No git dependency, no third-party plugin dependencies.
 
@@ -76,6 +78,10 @@ pnpm check:align    # diff aligner & data-model assertions (needs Node >= 23.6)
 > checks (`narrowDiffs`, snapshot probing) over wire data that is byte-identical
 > across the two. A future kernel that renames or drops those wire fields
 > will pass `tsc` silently — verify against the newer kernel before shipping.
+
+## Activity
+
+[![HaoyueQin/dsh-diff-stat GitStock K-Line Chart](https://gitstock.org/HaoyueQin/dsh-diff-stat/stock.svg)](https://gitstock.org/HaoyueQin/dsh-diff-stat)
 
 ## License
 
