@@ -27,7 +27,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 
 ## Features
 
-- **Two kernel generations, one build** — the same bundle serves harness `0.1.1-rc.2` and `0.1.2-alpha.1` (whose client-runtime package, view envelope and service names all changed); diff hunks are read from the tools' persisted wire `meta` on both
+- **Three releases, one build** — the same bundle serves harness `0.1.1-rc.2`, `0.1.2-alpha.1` and `0.1.2-alpha.2` (the alpha line's client-runtime package, view envelope and service names changed since rc.2, while alpha.1 → alpha.2 left every surface this plugin touches untouched); diff hunks are read from the tools' persisted wire `meta` on all three
 - **Inline +N −M badges** — takes over the stock mutation rows for `edit`, `write` and `str_replace_editor` (keyed lower-priority shadow; uninstall restores stock). Counts are the real changed lines — the same LCS walk the diff renders — estimated from the arguments while running, exact once the result settles
 - **Aligned diff window** — expanding a row opens a height-capped scrollable unified view. Both sides are LCS-aligned first: shared lines render as up to ±3 lines of context around each change, untouched runs collapse into ⋯, and the footer counts exactly the rendered rows
 - **Per-turn summary card** — a collapsible "N files changed +X −Y" bar at each turn's tail; per-file rows with type icons, directory, ±lines, review, open ▾ and undo. Same-file edits merge and accumulate in settlement order
@@ -82,13 +82,14 @@ pnpm typecheck      # both halves via tsc
 pnpm check:align    # diff aligner & data-model assertions (needs Node >= 23.6)
 ```
 
-> **Kernel compatibility note:** one built bundle targets both harness
-> generations — `0.1.1-rc.2` and `0.1.2-alpha.1`. Compile-time types are
-> pinned to the `0.1.1-rc.2` devDependencies (the newer packages are not on
-> public npm); compatibility with the newer kernel rests on runtime shape
-> checks (`narrowDiffs`, snapshot probing) over wire data that is byte-identical
-> across the two. A future kernel that renames or drops those wire fields
-> will pass `tsc` silently — verify against the newer kernel before shipping.
+> **Kernel compatibility note:** one built bundle targets three harness
+> releases — `0.1.1-rc.2`, `0.1.2-alpha.1` and `0.1.2-alpha.2`. Compile-time
+> types are pinned to the `0.1.1-rc.2` devDependencies (later client-runtime
+> versions are not on public npm); compatibility with newer releases rests on
+> runtime shape checks (`narrowDiffs`, snapshot probing) over wire data that is
+> byte-identical across all three. A future release that renames or drops those
+> wire fields will pass `tsc` silently — verify against the newer release
+> before shipping.
 
 ## Activity
 
