@@ -1,6 +1,6 @@
 {
   "name": "dsh-diff-stat",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Inline +N −M diff badges on edit/write tool rows and a per-turn file change summary card for DeepSeek Harness. PTC/code-dispatch fallback, no git required.",
   "keywords": [
     "deepseek-harness",
