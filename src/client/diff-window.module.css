@@ -14,6 +14,10 @@
 }
 
 .line {
+	/* border-box: under content-box the min-width:100% row plus its horizontal
+	   padding always overflowed the scroll pane by 16px, so the pane carried a
+	   permanent horizontal scrollbar even for short lines. */
+	box-sizing: border-box;
 	width: max-content;
 	min-width: 100%;
 	padding: 0 8px;
