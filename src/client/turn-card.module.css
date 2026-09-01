@@ -12,7 +12,11 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	width: 100%;
+	/* No width:100% here — the harness has no global border-box reset, so the
+	   declared width plus the horizontal padding would overflow the card and
+	   push the auto-margin undo button onto the overflow:hidden clip edge.
+	   A block-level flex container fills the card without a width. */
+	box-sizing: border-box;
 	padding: 6px 10px;
 	border: none;
 	border-radius: 6px;
