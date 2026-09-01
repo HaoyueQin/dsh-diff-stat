@@ -62,9 +62,28 @@
 	box-shadow: inset 3px 0 0 0 var(--dsw-alias-state-success-primary);
 }
 
-.path {
+/* Path header bar: the file name sits in its own bordered strip above the
+   numbered rows — the same separated presentation as the inline peek's top
+   bar — and stays pinned while a long diff scrolls (bar sticky to the top,
+   the name itself sticky to the left over horizontal scrolling). */
+.pathBar {
+	box-sizing: border-box;
+	width: max-content;
+	min-width: 100%;
+	padding: 3px 8px;
 	color: var(--dsw-alias-label-tertiary);
 	font-weight: 600;
+	background: var(--dsw-alias-markdown-code-block);
+	border-bottom: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+
+.pathText {
+	display: inline-block;
+	position: sticky;
+	left: 8px;
 }
 
 .ctx {

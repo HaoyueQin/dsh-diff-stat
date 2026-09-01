@@ -88,7 +88,6 @@ function buildRows(diffs: readonly DiffHunk[], bases: readonly (number | null)[]
 }
 
 const ROW_CLASS = {
-  path: css.path,
   del: css.del,
   add: css.add,
   ctx: css.ctx,
@@ -117,12 +116,18 @@ export function DiffWindow({ diffs, bases, maxHeight = 320 }: DiffWindowProps) {
   return (
     <div className={css.window} data-diff-window="">
       <div className={css.scroll} style={{ maxHeight }}>
-        {rows.map((row, index) => (
-          <div key={index} className={css.line + ' ' + ROW_CLASS[row.kind]}>
-            <span className={css.no} aria-hidden>{row.no ?? ''}</span>
-            <span className={css.tx}>{row.text}</span>
-          </div>
-        ))}
+        {rows.map((row, index) =>
+          row.kind === 'path' ? (
+            <div key={index} className={css.pathBar}>
+              <span className={css.pathText}>{row.text}</span>
+            </div>
+          ) : (
+            <div key={index} className={css.line + ' ' + ROW_CLASS[row.kind]}>
+              <span className={css.no} aria-hidden>{row.no ?? ''}</span>
+              <span className={css.tx}>{row.text}</span>
+            </div>
+          ),
+        )}
       </div>
       <div className={css.footer}>└ +{added} −{removed} · {files} file{files === 1 ? '' : 's'}</div>
     </div>
