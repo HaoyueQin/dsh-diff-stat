@@ -236,8 +236,11 @@
 }
 
 /* Width follows the chat column (--dsh-chat-content-width) — the desktop
-   harness lets the user resize that column (40-95%), so no pixel cap here. */
+   harness lets the user resize that column (40-95%), so no pixel cap here.
+   No horizontal inset: the review diff spans the SAME width as the inline
+   peek (both are children of the same file-row block), per the reference
+   views' shared column. */
 .diffWrap {
-	margin: 2px 0 6px 30px;
+	margin: 2px 0 6px;
 }
 
