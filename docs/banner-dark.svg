@@ -50,12 +50,21 @@
     <!-- aligned diff window -->
     <rect x="722" y="94" width="418" height="106" rx="10" fill="#0b1120" fill-opacity=".55" stroke="#ffffff" stroke-opacity=".1"/>
     <text x="736" y="114" font-size="10.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#8b98ad">D:\Project\test\dsh\hello.rs</text>
-    <rect x="728" y="122" width="406" height="19" rx="3" fill="#f85149" fill-opacity=".14"/>
-    <text x="738" y="135.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#ff9d96">- fn greet(name: &amp;str) -&gt; &amp;str { "v1" }</text>
-    <rect x="728" y="143" width="406" height="19" rx="3" fill="#3fb950" fill-opacity=".15"/>
-    <text x="738" y="156.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">+ fn greet(name: &amp;str) -&gt; String {</text>
-    <rect x="728" y="164" width="406" height="19" rx="3" fill="#3fb950" fill-opacity=".15"/>
-    <text x="738" y="177.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">+     format!("Hello, {name}")</text>
+    <line x1="722" y1="119" x2="1140" y2="119" stroke="#ffffff" stroke-opacity=".1"/>
+    <rect x="722" y="122" width="418" height="19" fill="#f85149" fill-opacity=".14"/>
+    <rect x="722" y="122" width="3" height="19" fill="#f47067"/>
+    <text x="750" y="135.5" font-size="9.5" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#ff9d96">12</text>
+    <text x="764" y="135.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#ff9d96">- fn greet(name: &amp;str) -&gt; &amp;str { "v1" }</text>
+    <rect x="722" y="143" width="418" height="19" fill="#3fb950" fill-opacity=".15"/>
+    <rect x="722" y="143" width="3" height="19" fill="#5ec57d"/>
+    <text x="750" y="156.5" font-size="9.5" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">12</text>
+    <text x="764" y="156.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">+ fn greet(name: &amp;str) -&gt; String {</text>
+    <rect x="722" y="164" width="418" height="19" fill="#3fb950" fill-opacity=".15"/>
+    <rect x="722" y="164" width="3" height="19" fill="#5ec57d"/>
+    <text x="750" y="177.5" font-size="9.5" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">13</text>
+    <text x="764" y="177.5" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7ee2a8">+     format!("Hello, {name}")</text>
+    <line x1="756" y1="119" x2="756" y2="186" stroke="#ffffff" stroke-opacity=".1"/>
+    <rect x="722" y="94" width="418" height="106" rx="10" fill="none" stroke="#ffffff" stroke-opacity=".1"/>
     <text x="736" y="196" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#97a4b8">└ <tspan fill="#5ec57d">+43</tspan><tspan fill="#f47067"> −11</tspan> · 1 file</text>
 
     <!-- per-turn summary bar; the total counts up live -->

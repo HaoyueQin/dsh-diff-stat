@@ -46,13 +46,22 @@
       <animateTransform attributeName="transform" type="translate" dur="7s" repeatCount="indefinite" calcMode="spline" keyTimes="0;0.328;0.443;0.886;0.957;1" keySplines="0.25 0.1 0.25 1;0.25 0.1 0.25 1;0 0 1 1;0.4 0 0.6 1;0 0 1 1" values="0 -12;0 -12;0 0;0 0;0 -12;0 -12"/>
       <rect x="44" y="84" width="632" height="132" rx="10" fill="#ffffff" fill-opacity=".78" stroke="#e2e7ef"/>
       <text x="58" y="103" font-size="11" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#7a8494">D:\Project\test\dsh\hello.rs</text>
-      <rect x="50" y="108" width="620" height="18" rx="3" fill="#fbdcd9" fill-opacity=".75"/>
-      <text x="60" y="121" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#a03329">- fn greet(name: &amp;str) -&gt; &amp;str { "v1" }</text>
-      <rect x="50" y="128" width="620" height="18" rx="3" fill="#d4efdc" fill-opacity=".8"/>
-      <text x="60" y="141" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#17652b">+ fn greet(name: &amp;str) -&gt; String {</text>
-      <rect x="50" y="148" width="620" height="18" rx="3" fill="#d4efdc" fill-opacity=".8"/>
-      <text x="60" y="161" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#17652b">+     format!("Hello, {name}")</text>
-      <circle cx="66" cy="178" r="1.8" fill="#98a1b0"/><circle cx="74" cy="178" r="1.8" fill="#98a1b0"/><circle cx="82" cy="178" r="1.8" fill="#98a1b0"/>
+      <line x1="44" y1="110" x2="676" y2="110" stroke="#e2e7ef"/>
+      <rect x="44" y="114" width="632" height="18" fill="#fbdcd9" fill-opacity=".75"/>
+      <rect x="44" y="114" width="3" height="18" fill="#c93b34"/>
+      <text x="78" y="127" font-size="10" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#a03329">12</text>
+      <text x="96" y="127" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#a03329">- fn greet(name: &amp;str) -&gt; &amp;str { "v1" }</text>
+      <rect x="44" y="134" width="632" height="18" fill="#d4efdc" fill-opacity=".8"/>
+      <rect x="44" y="134" width="3" height="18" fill="#1f7a37"/>
+      <text x="78" y="147" font-size="10" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#17652b">12</text>
+      <text x="96" y="147" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#17652b">+ fn greet(name: &amp;str) -&gt; String {</text>
+      <rect x="44" y="154" width="632" height="18" fill="#d4efdc" fill-opacity=".8"/>
+      <rect x="44" y="154" width="3" height="18" fill="#1f7a37"/>
+      <text x="78" y="167" font-size="10" text-anchor="end" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#17652b">13</text>
+      <text x="96" y="167" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#17652b">+     format!("Hello, {name}")</text>
+      <line x1="84" y1="110" x2="84" y2="190" stroke="#e2e7ef"/>
+      <circle cx="96" cy="181" r="1.8" fill="#98a1b0"/><circle cx="104" cy="181" r="1.8" fill="#98a1b0"/><circle cx="112" cy="181" r="1.8" fill="#98a1b0"/>
+      <rect x="44" y="84" width="632" height="132" rx="10" fill="none" stroke="#e2e7ef"/>
       <text x="58" y="205" font-size="11.5" font-family="ui-monospace, 'Cascadia Code', Consolas, Menlo, monospace" fill="#6b7482">└ <tspan fill="#1f7a37">+43</tspan><tspan fill="#c93b34"> −11</tspan> · 1 file</text>
     </g>
   </g>
