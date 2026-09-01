@@ -11,6 +11,7 @@
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import { contentLines, isArgHunk } from './diff-contract.ts'
+import { ALIGN_MAX_SIDE_LINES } from './diff-align.ts'
 import { hostCall } from './api.ts'
 
 /** Shared lines kept on each side of the located fragment (host parity). */
@@ -50,17 +51,19 @@ async function readCached(path: string, cwd: string | undefined): Promise<string
  * @param hunk - the arg-derived hunk to rebuild.
  * @param fileLines - the file's current content lines (the post-image basis).
  */
-export function boostHunkWithContext(hunk: DiffHunk, fileLines: readonly string[]): DiffHunk | null {
-  const newLines = contentLines(hunk.newText)
-  if (newLines.length === 0) return null
-  // The fragment must sit in the file EXACTLY once: duplicated content (a
-  // snippet copied across a template) has no single anchor, and anchoring the
-  // first occurrence would surround the wrong region with context.
+/**
+ * Unique-exact locate: the sole 0-based index where `needle` occurs inside
+ * `fileLines`, or null when absent or ambiguous (duplicated content has no
+ * single anchor, and anchoring the first occurrence would number or wrap the
+ * wrong region).
+ */
+function locateOnce(needle: readonly string[], fileLines: readonly string[]): number | null {
+  if (needle.length === 0) return null
   let at = -1
-  for (let i = 0; i + newLines.length <= fileLines.length; i++) {
+  for (let i = 0; i + needle.length <= fileLines.length; i++) {
     let matches = true
-    for (let j = 0; j < newLines.length; j++) {
-      if (fileLines[i + j] !== newLines[j]) {
+    for (let j = 0; j < needle.length; j++) {
+      if (fileLines[i + j] !== needle[j]) {
         matches = false
         break
       }
@@ -69,7 +72,13 @@ export function boostHunkWithContext(hunk: DiffHunk, fileLines: readonly string[
     if (at !== -1) return null
     at = i
   }
-  if (at === -1) return null
+  return at === -1 ? null : at
+}
+
+/** Wrap the fragment located at `at` with ±{@link BOOST_CONTEXT_LINES} shared
+ *  lines, or null when there is no context to add (file edges). */
+function wrapWithContext(hunk: DiffHunk, fileLines: readonly string[], at: number): DiffHunk | null {
+  const newLines = contentLines(hunk.newText)
   const before = fileLines.slice(Math.max(0, at - BOOST_CONTEXT_LINES), at)
   const afterStart = at + newLines.length
   const after = fileLines.slice(afterStart, Math.min(fileLines.length, afterStart + BOOST_CONTEXT_LINES))
@@ -80,6 +89,14 @@ export function boostHunkWithContext(hunk: DiffHunk, fileLines: readonly string[
     oldText: [...before, ...oldLines, ...after].join('\n'),
     newText: [...before, ...newLines, ...after].join('\n'),
   }
+}
+
+export function boostHunkWithContext(hunk: DiffHunk, fileLines: readonly string[]): DiffHunk | null {
+  const newLines = contentLines(hunk.newText)
+  if (newLines.length === 0) return null
+  const at = locateOnce(newLines, fileLines)
+  if (at === null) return null
+  return wrapWithContext(hunk, fileLines, at)
 }
 
 /**
@@ -117,4 +134,73 @@ export async function boostEditHunks(
     return boosted
   })
   return changed ? out : diffs
+}
+
+/** One expanded window's render material. */
+export interface PreparedWindow {
+  /** The hunks to render — arg-derived hunks rebuilt with file context
+   *  (identity-stable when nothing changed). */
+  readonly diffs: readonly DiffHunk[]
+  /** Per-hunk numbering basis: bases[k] is the 1-based line of diffs[k]'s
+   *  first side line in the CURRENT file, or null when that hunk has no
+   *  locatable basis (the window then numbers it window-relatively). */
+  readonly bases: readonly (number | null)[]
+}
+
+/**
+ * Boost + numbering in one cached read — the preparation both row callers run
+ * when a window expands: arg-derived hunks gain real file context, and every
+ * hunk gets its gutter basis located in the current file. The basis anchors on
+ * the hunk's post-image (any hunk with content), on the old side's leading
+ * shared context for a deletion-only hunk (the deleted lines themselves are
+ * no longer in the file), and resolves free to `1` for a settled wire
+ * create/overwrite whose post-image IS the file. Locating is
+ * uniqueness-checked and skipped over the alignment budget; every failure
+ * mode yields a null basis and the window falls back to window-relative
+ * numbers. Returns null only when the host read failed outright (host absent,
+ * binary, unreadable).
+ */
+export async function prepareDiffWindow(
+  diffs: readonly DiffHunk[],
+  path: string,
+  cwd: string | undefined,
+): Promise<PreparedWindow | null> {
+  const content = await readCached(path, cwd)
+  if (content === null) return null
+  const fileLines = contentLines(content)
+  let changed = false
+  const bases = diffs.map((): number | null => null)
+  const out = diffs.map((hunk, k) => {
+    if (!isArgHunk(hunk) && hunk.oldText === null) {
+      bases[k] = 1
+      return hunk
+    }
+    if (contentLines(hunk.newText).length > ALIGN_MAX_SIDE_LINES || contentLines(hunk.oldText ?? '').length > ALIGN_MAX_SIDE_LINES) {
+      return hunk
+    }
+    const newLines = contentLines(hunk.newText)
+    if (newLines.length > 0) {
+      const at = locateOnce(newLines, fileLines)
+      if (at === null) return hunk
+      if (isArgHunk(hunk)) {
+        const boosted = wrapWithContext(hunk, fileLines, at)
+        if (boosted !== null) {
+          // The rebuilt hunk opens with up to BOOST_CONTEXT_LINES shared
+          // lines lifted from before the fragment.
+          bases[k] = at - Math.min(at, BOOST_CONTEXT_LINES) + 1
+          changed = true
+          return boosted
+        }
+      }
+      // Located even where the booster declined (file-edge flush): the bare
+      // hunk still numbers from its real position.
+      bases[k] = at + 1
+      return hunk
+    }
+    const oldLines = contentLines(hunk.oldText ?? '')
+    const at = locateOnce(oldLines.slice(0, Math.min(3, oldLines.length)), fileLines)
+    if (at !== null) bases[k] = at + 1
+    return hunk
+  })
+  return { diffs: changed ? out : diffs, bases }
 }

@@ -52,9 +52,33 @@
 }
 
 .line {
-	padding: 0 8px;
+	box-sizing: border-box;
+	display: flex;
+	padding: 0 8px 0 0;
 	min-height: var(--dsl-diff-line-height, 18px);
 	color: var(--dsw-alias-label-primary);
+}
+
+/* Sticky gutter: same convention as the diff window's number column — the
+   column pins to the pane's left edge while long lines scroll beneath it. */
+.no {
+	flex: none;
+	min-width: 4ch;
+	margin-right: 8px;
+	padding: 0 6px 0 10px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--dsw-alias-label-tertiary);
+	background: var(--dsw-alias-markdown-code-block);
+	border-right: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));
+	position: sticky;
+	left: 0;
+	user-select: none;
+}
+
+.tx {
+	flex: 1 1 auto;
+	min-width: 0;
 }
 
 

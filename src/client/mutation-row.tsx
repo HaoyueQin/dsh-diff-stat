@@ -17,7 +17,6 @@ import clsx from 'clsx'
 import {
   DisclosureRow, IconEditOutline16, IconInspectOutline12, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 // The stock row's stylesheet, vendored verbatim into ./tool-row.module.css
 // (the npm ui-tool tarball omits src/) and inlined — the takeover row renders
@@ -25,8 +24,8 @@ import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runt
 import rowCss from './tool-row.module.css'
 import badgeCss from './badge.module.css'
 import { DiffWindow } from './diff-window.tsx'
-import { diffCardModel, diffStats, isArgHunk, parseArgs } from './diff-contract.ts'
-import { boostEditHunks } from './context-boost.ts'
+import { diffCardModel, diffStats, parseArgs } from './diff-contract.ts'
+import { prepareDiffWindow, type PreparedWindow } from './context-boost.ts'
 
 /** Row state semantic; colors self-supplied via StateDot. */
 type ToolRowState = 'running' | 'ok' | 'error' | 'stopped'
@@ -150,30 +149,30 @@ export function MutationRow({ toolName, block, cwd, openFile, inspect }: Mutatio
   const expandable = model.body !== null || outputText !== null || diffBody !== null
   const open = expanded && expandable
 
-  // Arg-derived hunks are the bare old_string → new_string fragment; once the
-  // row is expanded (and settled successfully), read the file through the host
-  // and surround them with real context. Best-effort: anything unlocatable
-  // keeps rendering as the bare fragment.
-  const [boosted, setBoosted] = useState<readonly DiffHunk[] | null>(null)
+  // Once the row is expanded (and settled successfully), one host read both
+  // rebuilds arg-derived fragments with real file context AND resolves each
+  // hunk's gutter numbering basis. Best-effort: a failed read leaves the bare
+  // hunks, which then number window-relatively.
+  const [prepared, setPrepared] = useState<PreparedWindow | null>(null)
   const rawDiffs = diffBody?.card.diffs ?? null
-  const boostable = open === true
+  const preparable = open === true
     && model.state === 'ok'
     && rawDiffs !== null
-    && rawDiffs.some(isArgHunk)
   useEffect(() => {
-    if (!boostable || rawDiffs === null) {
-      setBoosted(null)
+    if (!preparable || rawDiffs === null) {
+      setPrepared(null)
       return
     }
     const path = rawDiffs[0]?.path
     if (path === undefined) return
     let alive = true
-    void boostEditHunks(rawDiffs, path, cwd).then(next => {
-      if (alive) setBoosted(next === rawDiffs ? null : next)
+    void prepareDiffWindow(rawDiffs, path, cwd).then(next => {
+      if (alive) setPrepared(next)
     })
     return () => { alive = false }
-  }, [boostable, rawDiffs, cwd])
-  const renderDiffs = boosted ?? rawDiffs
+  }, [preparable, rawDiffs, cwd])
+  const renderDiffs = prepared?.diffs ?? rawDiffs
+  const renderBases = prepared?.bases
   const status = stateStatus(model.state)
   const failureLine = model.state === 'error' ? model.errorSummary ?? null : null
   const summaryText = failureLine ?? model.summary
@@ -228,7 +227,7 @@ export function MutationRow({ toolName, block, cwd, openFile, inspect }: Mutatio
       >
         <div className={rowCss.bodyWrap}>
           {renderDiffs !== null
-            ? <DiffWindow diffs={renderDiffs} maxHeight={480} />
+            ? <DiffWindow diffs={renderDiffs} bases={renderBases} maxHeight={480} />
             : (
               <>
                 {(model.body !== null || outputText !== null) && (

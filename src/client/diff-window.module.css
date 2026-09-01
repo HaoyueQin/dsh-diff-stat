@@ -18,11 +18,48 @@
 	   padding always overflowed the scroll pane by 16px, so the pane carried a
 	   permanent horizontal scrollbar even for short lines. */
 	box-sizing: border-box;
+	display: flex;
 	width: max-content;
 	min-width: 100%;
-	padding: 0 8px;
+	padding: 0 8px 0 0;
 	min-height: var(--dsl-diff-line-height, 18px);
 	color: var(--dsw-alias-label-primary);
+}
+
+/* Sticky gutter: the number column pins to the pane's left edge while long
+   rows scroll beneath it. Each cell repaints the row's own surface over the
+   opaque window base so scrolled code never ghosts through the pinned
+   numbers, and changed rows carry the reference views' left accent bar. */
+.no {
+	flex: none;
+	min-width: 4ch;
+	margin-right: 8px;
+	padding: 0 6px 0 10px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+	color: var(--dsw-alias-label-tertiary);
+	background: var(--dsw-alias-markdown-code-block);
+	border-right: 1px solid var(--dsw-alias-border-secondary, rgba(127, 127, 127, 0.15));
+	position: sticky;
+	left: 0;
+	user-select: none;
+}
+
+.tx {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.del .no {
+	color: var(--dsw-alias-state-error-primary);
+	background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 7%, var(--dsw-alias-markdown-code-block));
+	box-shadow: inset 3px 0 0 0 var(--dsw-alias-state-error-primary);
+}
+
+.add .no {
+	color: var(--dsw-alias-state-success-primary);
+	background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 7%, var(--dsw-alias-markdown-code-block));
+	box-shadow: inset 3px 0 0 0 var(--dsw-alias-state-success-primary);
 }
 
 .path {
@@ -58,6 +95,14 @@
 
 :global(body[data-dsh-bg-glass]) [data-diff-window] .del {
 	background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 13%, transparent);
+}
+
+:global(body[data-dsh-bg-glass]) [data-diff-window] .del .no {
+	background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 13%, var(--dsw-alias-markdown-code-block));
+}
+
+:global(body[data-dsh-bg-glass]) [data-diff-window] .add .no {
+	background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 13%, var(--dsw-alias-markdown-code-block));
 }
 
 .footer {

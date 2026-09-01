@@ -13,7 +13,7 @@
 export const CONTEXT_LINES = 3
 
 /** Above this per-side line count the DP table is skipped and the caller falls back to plain blocks. */
-const ALIGN_MAX_SIDE_LINES = 1200
+export const ALIGN_MAX_SIDE_LINES = 1200
 
 /** Kind of one rendered alignment row ('gap' marks a collapsed run). */
 export type AlignedKind = 'del' | 'add' | 'ctx' | 'gap'
@@ -22,6 +22,10 @@ export type AlignedKind = 'del' | 'add' | 'ctx' | 'gap'
 export interface AlignedRow {
   kind: AlignedKind
   text: string
+  /** 0-based position of the row's line on the OLD side ('del'/'ctx' rows). */
+  oldIdx?: number
+  /** 0-based position of the row's line on the NEW side ('add'/'ctx' rows). */
+  newIdx?: number
 }
 
 /** One LCS step between the sides ('ctx' = shared by both). */
@@ -120,9 +124,29 @@ function collapse(ops: readonly AlignOp[], context: number): AlignedRow[] {
   }
   const rows: AlignedRow[] = []
   let gapping = false
+  // Side counters advance for EVERY op — a folded row's line still occupies
+  // its side position, so kept rows number against the full sides.
+  let i = 0
+  let j = 0
   for (let k = 0; k < ops.length; k++) {
+    const op = ops[k]
+    const oldIdx = op.kind === 'add' ? undefined : i
+    const newIdx = op.kind === 'del' ? undefined : j
+    if (op.kind === 'del') i += 1
+    else if (op.kind === 'add') j += 1
+    else {
+      i += 1
+      j += 1
+    }
     if (keep[k]) {
-      rows.push({ kind: ops[k].kind, text: ops[k].text })
+      // A row carries ONLY its meaningful side index (del → old, add → new,
+      // ctx → both) so key sets stay honest for consumers and assertions.
+      const row: AlignedRow = op.kind === 'del'
+        ? { kind: op.kind, text: op.text, oldIdx }
+        : op.kind === 'add'
+          ? { kind: op.kind, text: op.text, newIdx }
+          : { kind: op.kind, text: op.text, oldIdx, newIdx }
+      rows.push(row)
       gapping = false
     } else if (!gapping) {
       rows.push({ kind: 'gap', text: '\u22ef' })
@@ -205,7 +229,25 @@ export function terminatorRows(oldLines: readonly string[], newLines: readonly s
   const oldLast = oldLines[oldLines.length - 1] ?? ''
   const newLast = newLines[newLines.length - 1] ?? oldLast
   return [
-    { kind: 'del', text: oldLast },
-    { kind: 'add', text: newLast },
+    { kind: 'del', text: oldLast, oldIdx: oldLines.length - 1 },
+    { kind: 'add', text: newLast, newIdx: newLines.length - 1 },
   ]
+}
+
+/**
+ * The gutter number each aligned row displays, for ONE hunk: 'del' rows read
+ * the OLD side and 'ctx'/'add' rows the NEW side, both offset by `base` — the
+ * 1-based line of the hunk's first side line in the file, which the caller
+ * locates in the current file. Rows without a locatable base (or a missing
+ * index) fall back to 1..N window-relative numbering so a gutter always
+ * renders; 'gap' rows carry no number.
+ */
+export function gutterNumbers(rows: readonly AlignedRow[], base: number | null): readonly (number | undefined)[] {
+  let seq = 1
+  return rows.map(row => {
+    if (row.kind === 'gap') return undefined
+    const idx = row.kind === 'del' ? row.oldIdx : row.newIdx
+    if (base !== null && idx !== undefined) return base + idx
+    return seq++
+  })
 }

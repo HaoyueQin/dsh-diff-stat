@@ -20,10 +20,10 @@ import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   ConversationSnapshot, ToolCallBlock, TurnLocation, UseConversationSession,
 } from '@deepseek-ai/dsh-client-runtime/client'
-import { diffStats, isArgHunk } from './diff-contract.ts'
+import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
 import { collectDispatchFiles, mergeChangedFiles } from './turn-merge.ts'
-import { boostEditHunks } from './context-boost.ts'
+import { prepareDiffWindow, type PreparedWindow } from './context-boost.ts'
 import { NS } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
@@ -84,10 +84,13 @@ export function TurnCard(props: TurnCardProps) {
   const [peeked, setPeeked] = useState<ReadonlySet<string>>(() => new Set())
   const [hostReady, setHostReady] = useState(false)
   const [undoState, setUndoState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle')
-  // Arg-derived hunks (PTC fragments) gain file context when their file is
-  // expanded for review; applied wire hunks already carry the host's ±3. Each
-  // entry pins the hunk list it was built from, so stale entries self-invalidate.
-  const [boosted, setBoosted] = useState<ReadonlyMap<string, { diffs: readonly DiffHunk[]; result: readonly DiffHunk[] }>>(() => new Map())
+  // Expanding a file for review runs ONE host read that both rebuilds
+  // arg-derived (PTC) fragments with real file context and resolves every
+  // hunk's gutter numbering basis; applied wire hunks already carry the host's
+  // ±3. Each entry pins the hunk list it was built from, so stale entries
+  // self-invalidate; a null window (host read failed) renders the raw hunks
+  // with window-relative numbers.
+  const [prepared, setPrepared] = useState<ReadonlyMap<string, { input: readonly DiffHunk[]; window: PreparedWindow | null }>>(() => new Map())
 
   // The PTC half: join this Turn's edit/write dispatch sub-calls from the
   // stock chat tool tree (the accumulator cannot route them — dispatch
@@ -161,21 +164,21 @@ export function TurnCard(props: TurnCardProps) {
   // ref check keeps already-boosted files from re-running on every toggle.
   const allFilesRef = useRef(allFiles)
   allFilesRef.current = allFiles
-  const boostedRef = useRef(boosted)
-  boostedRef.current = boosted
+  const preparedRef = useRef(prepared)
+  preparedRef.current = prepared
   useEffect(() => {
     if (revealed.size === 0) return
     let alive = true
     void (async () => {
       for (const path of revealed) {
         const file = allFilesRef.current.find(candidate => candidate.path === path)
-        if (file === undefined || !file.diffs.some(isArgHunk)) continue
-        if (boostedRef.current.get(path)?.diffs === file.diffs) continue
-        const next = await boostEditHunks(file.diffs, path, cwd)
+        if (file === undefined) continue
+        if (preparedRef.current.get(path)?.input === file.diffs) continue
+        const next = await prepareDiffWindow(file.diffs, path, cwd)
         if (!alive) return
-        setBoosted(prev => {
+        setPrepared(prev => {
           const map = new Map(prev)
-          map.set(path, { diffs: file.diffs, result: next })
+          map.set(path, { input: file.diffs, window: next })
           return map
         })
       }
@@ -304,6 +307,7 @@ export function TurnCard(props: TurnCardProps) {
             const dir = dirname(file.path)
             const stats = statsByPath.get(file.path) ?? { added: 0, removed: 0 }
             const revealedFile = revealed.has(file.path)
+            const preparedEntry = prepared.get(file.path)
             return (
               <div key={file.path} data-diff-stat-file={file.path}>
                 <div className={css.fileRow}>
@@ -363,9 +367,13 @@ export function TurnCard(props: TurnCardProps) {
                     </span>
                   </span>
                 </div>
-                {revealedFile && (
+                {revealedFile && preparedEntry !== undefined && preparedEntry.input === file.diffs && preparedEntry.window !== null && (
                   <div className={css.diffWrap}>
-                    <DiffWindow diffs={boosted.get(file.path)?.diffs === file.diffs ? boosted.get(file.path)!.result : file.diffs} maxHeight={320} />
+                    <DiffWindow
+                      diffs={preparedEntry.window.diffs}
+                      bases={preparedEntry.window.bases}
+                      maxHeight={320}
+                    />
                   </div>
                 )}
                 {peeked.has(file.path) && <FilePeek path={file.path} cwd={cwd} t={t} onClose={() => { togglePeeked(file.path) }} />}

@@ -3,7 +3,7 @@
 // LTS versions fail with 'Unknown file extension ".ts"'. No build step,
 // no test framework.
 import assert from 'node:assert/strict'
-import { alignedHunkRows, changedLineCounts, CONTEXT_LINES } from '../src/client/diff-align.ts'
+import { alignedHunkRows, changedLineCounts, CONTEXT_LINES, gutterNumbers } from '../src/client/diff-align.ts'
 import { diffStats } from '../src/client/diff-contract.ts'
 // (terminatorOnly / terminatorRows added in the second import block below)
 import {
@@ -37,7 +37,7 @@ assert.deepEqual(rows.slice(-4).map(r => r.text), ['T0', 'T1', 'T2', '\u22ef'])
 
 // 3. Creation (empty old side): pure additions, nothing folded.
 rows = alignedHunkRows([], lines('a\nb'))
-assert.deepEqual(rows, [{ kind: 'add', text: 'a' }, { kind: 'add', text: 'b' }])
+assert.deepEqual(rows, [{ kind: 'add', text: 'a', newIdx: 0 }, { kind: 'add', text: 'b', newIdx: 1 }])
 
 // 4. Wipe (empty new side): pure deletions.
 rows = alignedHunkRows(lines('a\nb'), [])
@@ -126,7 +126,7 @@ assert.equal(changedLineCounts(big(1300), big(1300)), null)
   assert.ok(rendered !== null)
   assert.equal(rendered.filter(r => r.kind === 'del').length, 0)
   const termRows = terminatorRows(['a'], ['a'])
-  assert.deepEqual(termRows, [{ kind: 'del', text: 'a' }, { kind: 'add', text: 'a' }])
+  assert.deepEqual(termRows, [{ kind: 'del', text: 'a', oldIdx: 0 }, { kind: 'add', text: 'a', newIdx: 0 }])
   assert.deepEqual(changedLineCounts(['a'], ['a']), { added: 0, removed: 0 })
 }
 
@@ -398,6 +398,26 @@ assert.equal(pathKey('a/b.ts'), 'a/b.ts')
   assert.equal(mergedSplit.length, 1)
   assert.equal(mergedSplit[0].path, './f.ts')
   assert.equal(mergedSplit[0].diffs.length, 2)
+}
+
+// 18. gutterNumbers — the line-number gutter arithmetic: del rows read the
+//     OLD side, ctx/add rows the NEW side, both offset by the hunk's located
+//     base; unlocated hunks number 1..N window-relatively; gaps go unnumbered.
+{
+  const replaceRows = alignedHunkRows(lines('A\nB\nC\nD\nE\nF'), lines('A\nB\nX\nD\nE\nF'))
+  assert.deepEqual(gutterNumbers(replaceRows, 100), [100, 101, 102, 102, 103, 104, 105])
+  assert.deepEqual(gutterNumbers(replaceRows, null), [1, 2, 3, 4, 5, 6, 7])
+  // Insertion: the trailing context shifts on the new side (old 11 → new 12).
+  const insRows = alignedHunkRows(lines('head\ntail'), lines('head\nmiddle\ntail'))
+  assert.deepEqual(gutterNumbers(insRows, 10), [10, 11, 12])
+  // Gaps carry no number; the relative pass counts only rendered body rows.
+  const head6 = Array.from({ length: 6 }, (_, i) => 'S' + i)
+  const tail6 = Array.from({ length: 6 }, (_, i) => 'T' + i)
+  const gappedRows = alignedHunkRows([...head6, 'OLD', ...tail6], [...head6, 'NEW', ...tail6])
+  const gappedNos = gutterNumbers(gappedRows, 20)
+  assert.equal(gappedNos[0], undefined)
+  assert.deepEqual(gappedNos.slice(1, 9), [23, 24, 25, 26, 26, 27, 28, 29])
+  assert.equal(gappedNos[9], undefined)
 }
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')

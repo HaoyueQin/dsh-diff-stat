@@ -96,7 +96,10 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
       </div>
       <div className={css.body}>
         {lines.map((line, index) => (
-          <div key={String(index)} className={css.line}>{line}</div>
+          <div key={String(index)} className={css.line}>
+            <span className={css.no} aria-hidden>{index + 1}</span>
+            <span className={css.tx}>{line}</span>
+          </div>
         ))}
       </div>
     </div>
