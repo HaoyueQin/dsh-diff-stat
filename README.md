@@ -27,9 +27,10 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 
 ## Features
 
-- **Three releases, one build** — the same bundle serves harness `0.1.1-rc.2`, `0.1.2-alpha.1` and `0.1.2-alpha.2` (the alpha line's client-runtime package, view envelope and service names changed since rc.2, while alpha.1 → alpha.2 left every surface this plugin touches untouched); diff hunks are read from the tools' persisted wire `meta` on all three
+- **Four releases, one build** — the same bundle serves harness `0.1.1-rc.2`, `0.1.2-alpha.1`, `0.1.2-alpha.2` and `0.1.2-alpha.3` (the alpha line's client-runtime package, view envelope and service names changed since rc.2, while alpha.1 → alpha.3 left every surface this plugin touches untouched); diff hunks are read from the tools' persisted wire `meta` on all four
 - **Inline +N −M badges** — takes over the stock mutation rows for `edit`, `write` and `str_replace_editor` (keyed lower-priority shadow; uninstall restores stock). Counts are the real changed lines — the same LCS walk the diff renders — estimated from the arguments while running, exact once the result settles
 - **Aligned diff window** — expanding a row opens a height-capped scrollable unified view. Both sides are LCS-aligned first: shared lines render as up to ±3 lines of context around each change, untouched runs collapse into ⋯, and the footer counts exactly the rendered rows
+- **Line-number gutters** — the file view numbers its lines 1..N and the diff window pins each hunk to its real position in the current file (one cached fenced read, uniqueness-checked): deleted rows read the old side, context/added rows the new side, with the changed rows' accent bars. A hunk that cannot be located (host absent, drifted file, over budget) numbers window-relatively 1..N, so the gutter always renders
 - **Per-turn summary card** — a collapsible "N files changed +X −Y" bar at each turn's tail; per-file rows with type icons, directory, ±lines, review, open ▾ and undo. Same-file edits merge and accumulate in settlement order
 - **Code Dispatch (PTC), end to end** — dispatch sub-calls carry no wire diff view: rows fall back to the argument-derived diff, and the summary card joins their files from the stock chat tool tree, so a pure Code-Mode turn still gets its card. `subCallId` dedup keeps replays from double-counting
 - **File-context boost** — bare argument fragments gain up to ±3 lines of real file context when expanded: the booster reads the file through the host's fenced API, locates the fragment's post-image and rebuilds the hunk (best-effort; unlocatable fragments keep their bare form)
@@ -82,12 +83,13 @@ pnpm typecheck      # both halves via tsc
 pnpm check:align    # diff aligner & data-model assertions (needs Node >= 23.6)
 ```
 
-> **Kernel compatibility note:** one built bundle targets three harness
-> releases — `0.1.1-rc.2`, `0.1.2-alpha.1` and `0.1.2-alpha.2`. Compile-time
+> **Kernel compatibility note:** one built bundle targets four harness
+> releases — `0.1.1-rc.2`, `0.1.2-alpha.1`, `0.1.2-alpha.2` and
+> `0.1.2-alpha.3`. Compile-time
 > types are pinned to the `0.1.1-rc.2` devDependencies (later client-runtime
 > versions are not on public npm); compatibility with newer releases rests on
 > runtime shape checks (`narrowDiffs`, snapshot probing) over wire data that is
-> byte-identical across all three. A future release that renames or drops those
+> byte-identical across all four. A future release that renames or drops those
 > wire fields will pass `tsc` silently — verify against the newer release
 > before shipping.
 
