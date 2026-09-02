@@ -27,6 +27,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm check:align
+      - run: pnpm check:join
       - run: pnpm build
       # A tag named vX.Y.Z must carry package.json version X.Y.Z, or the
       # release ships assets whose metadata names a different version than
