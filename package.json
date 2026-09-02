@@ -33,6 +33,7 @@
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "check:align": "node scripts/check-diff-align.mjs",
+    "check:join": "node scripts/check-turn-join.mjs",
     "build:clean": "node -e \"require('node:fs').rmSync('lib', { recursive: true, force: true })\""
   },
   "exports": {

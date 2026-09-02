@@ -14,15 +14,16 @@ import {
   IconChevronDownOutline14, IconChevronRightOutline14,
   IconCopyOutline16, IconFolderOpen16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ToolChatData, TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
-  ConversationSnapshot, ToolCallBlock, TurnLocation, UseConversationSession,
+  ConversationSnapshot, TurnLocation, UseConversationSession,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
-import { collectDispatchFiles, mergeChangedFiles } from './turn-merge.ts'
+import { mergeChangedFiles } from './turn-merge.ts'
+import { extractDispatchFiles, type TurnJoinCache } from './turn-join.ts'
 import { prepareDiffWindow, type PreparedWindow } from './context-boost.ts'
 import { NS } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
@@ -97,17 +98,12 @@ export function TurnCard(props: TurnCardProps) {
   // records carry no turn coordinate). The selector returns the snapshot
   // itself — the only identity-stable choice under uSES's Object.is equality
   // (a fresh array per call would re-render this card forever) — and the
-  // extraction memoizes twice: per snapshot/turn from useMemo, and across
-  // snapshots through a node-identity fingerprint, so later turns streaming
-  // in the same session cannot re-parse this tree on every chunk.
+  // extraction (with its cross-snapshot node-identity fingerprint cache)
+  // lives in the pure turn-join module (check-turn-join.mjs pins the cache
+  // contract), so later turns streaming in the same session cannot re-parse
+  // this tree on every chunk.
   const snapshot = useSession?.(s => s)
-  const joinCache = useRef<{
-    snapshot: ConversationSnapshot | undefined
-    turn: TurnLocation | undefined
-    keys: readonly string[]
-    nodes: readonly unknown[]
-    result: readonly ChangedFile[]
-  } | null>(null)
+  const joinCache = useRef<TurnJoinCache | null>(null)
   const dispatchFiles = useMemo(() => {
     if (snapshot === undefined || turn === undefined) return EMPTY_FILES
     // 0.1.1-rc.2 nests the chat projection under `.chat` on the whole
@@ -119,29 +115,9 @@ export function TurnCard(props: TurnCardProps) {
     const locations = (chat as { locations?: { getTurn: (turn: number) => readonly string[] } | undefined }).locations
     const nodesStore = (chat as { nodes?: { get: (key: string) => unknown } | undefined }).nodes
     if (locations === undefined || nodesStore === undefined) return EMPTY_FILES
-    const cache = joinCache.current
-    const keys = locations.getTurn(turn.turn)
-    if (cache !== null && cache.snapshot === snapshot && cache.turn === turn && cache.keys.length === keys.length) {
-      let same = true
-      for (let i = 0; i < keys.length; i++) {
-        if (cache.keys[i] !== keys[i] || cache.nodes[i] !== nodesStore.get(keys[i])) {
-          same = false
-          break
-        }
-      }
-      if (same) return cache.result
-    }
-    const nodes: unknown[] = []
-    const files: ChangedFile[] = []
-    for (const key of keys) {
-      const node = nodesStore.get(key) as { kind?: string; data?: unknown } | undefined
-      nodes.push(node)
-      if (node === undefined || node.kind !== 'tool-call') continue
-      const root = (node.data as ToolChatData | undefined)?.root
-      if (root !== undefined) collectDispatchFiles(root as ToolCallBlock, files)
-    }
-    joinCache.current = { snapshot, turn, keys, nodes, result: files }
-    return files
+    const joined = extractDispatchFiles(locations, nodesStore, turn.turn, joinCache.current)
+    joinCache.current = joined.next
+    return joined.files
   }, [snapshot, turn])
   const allFiles = useMemo(() => mergeChangedFiles(matched, dispatchFiles), [matched, dispatchFiles])
   const total = useMemo(() => totals(allFiles), [allFiles])
@@ -157,11 +133,14 @@ export function TurnCard(props: TurnCardProps) {
   // Boost newly reviewed files whose hunks are bare arg fragments; the host
   // read is LRU-cached and best-effort, and unlocatable fragments (since
   // re-edited, truncated reads) simply keep their bare rendering. The list is
-  // read through a ref so the effect keys on the user interaction (revealed)
-  // only — allFiles churns on every parent render and must not re-trigger.
-  // Each entry records the exact hunk list it was built from: a re-render with
-  // fresh hunks for the same path invalidates the entry by identity, and the
-  // ref check keeps already-boosted files from re-running on every toggle.
+  // read through a ref, while the effect keys on the revealed set, the cwd
+  // and the allFiles identity: a genuine re-settlement (fresh turn data for
+  // the same path) re-prepares the stale entries in place, so an expanded
+  // review heals after real edits instead of snapping shut until re-toggle.
+  // Each entry records the exact hunk list it was built from; the ref check
+  // keeps already-boosted files from re-running, and a null window (host read
+  // failed — e.g. the file is being rewritten by the live turn) stays
+  // retryable on the next run instead of being pinned as done.
   const allFilesRef = useRef(allFiles)
   allFilesRef.current = allFiles
   const preparedRef = useRef(prepared)
@@ -173,7 +152,8 @@ export function TurnCard(props: TurnCardProps) {
       for (const path of revealed) {
         const file = allFilesRef.current.find(candidate => candidate.path === path)
         if (file === undefined) continue
-        if (preparedRef.current.get(path)?.input === file.diffs) continue
+        const entry = preparedRef.current.get(path)
+        if (entry !== undefined && entry.input === file.diffs && entry.window !== null) continue
         const next = await prepareDiffWindow(file.diffs, path, cwd)
         if (!alive) return
         setPrepared(prev => {
@@ -184,7 +164,7 @@ export function TurnCard(props: TurnCardProps) {
       }
     })()
     return () => { alive = false }
-  }, [revealed, cwd])
+  }, [revealed, cwd, allFiles])
 
   // Host half probe: the dependent actions (撤销/内嵌查看/定向打开) stay
   // hidden while the server route is absent.
@@ -308,6 +288,16 @@ export function TurnCard(props: TurnCardProps) {
             const stats = statsByPath.get(file.path) ?? { added: 0, removed: 0 }
             const revealedFile = revealed.has(file.path)
             const preparedEntry = prepared.get(file.path)
+            // Render the prepared window only while it was built from this
+            // file's exact hunk list; a stale entry, an in-flight prepare or
+            // a failed host read all fall back to the raw hunks (window-
+            // relative gutter numbers) so an expanded review never snaps
+            // shut on streaming identity churn.
+            const preparedWindow = preparedEntry !== undefined
+              && preparedEntry.input === file.diffs
+              && preparedEntry.window !== null
+              ? preparedEntry.window
+              : null
             return (
               <div key={file.path} data-diff-stat-file={file.path}>
                 <div className={css.fileRow}>
@@ -367,11 +357,11 @@ export function TurnCard(props: TurnCardProps) {
                     </span>
                   </span>
                 </div>
-                {revealedFile && preparedEntry !== undefined && preparedEntry.input === file.diffs && preparedEntry.window !== null && (
+                {revealedFile && (
                   <div className={css.diffWrap}>
                     <DiffWindow
-                      diffs={preparedEntry.window.diffs}
-                      bases={preparedEntry.window.bases}
+                      diffs={preparedWindow !== null ? preparedWindow.diffs : file.diffs}
+                      bases={preparedWindow !== null ? preparedWindow.bases : undefined}
                       maxHeight={320}
                     />
                   </div>

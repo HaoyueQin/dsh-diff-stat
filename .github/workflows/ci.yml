@@ -52,6 +52,7 @@ jobs:
       # Native TS type stripping needs Node >= 23.6 (backported to 22.18);
       # pinned to 24, the line the check was verified on.
       - run: pnpm check:align
+      - run: pnpm check:join
       - run: pnpm build
       # lib/ is committed so github: repo-url installs work without build
       # rights; a source change without a rebuilt lib would ship stale
