@@ -116,16 +116,30 @@ const clientBundle: UserConfig = {
     // Bundled node_modules modules carry ABSOLUTE //#region paths (the parent
     // package location of the build machine) in the emitted artifact; without
     // normalization the committed lib/ differs per checkout, breaking the
-    // byte-stable contract and the CI lib-diff gate.
+    // byte-stable contract and the CI lib-diff gate. pnpm adds a second
+    // platform axis: it shortens long peer-suffix virtual-store directory
+    // names under node_modules/.pnpm/ differently on Windows (MAX_PATH
+    // hashing) and Linux (full suffix), so the store segment is collapsed to
+    // the package path itself — identical labels on every machine.
     name: 'dsh-relative-region-labels',
     renderChunk(code: string): string | undefined {
       const root = PROJECT_ROOT.replaceAll('\\', '/')
       let changed = false
       const normalized = code.replace(/#region ([^\n]+)/g, (whole, raw: string) => {
-        const norm = raw.replaceAll('\\', '/')
+        let norm = raw.replaceAll('\\', '/')
+        let touched = false
         if (norm.startsWith(root + '/')) {
+          norm = norm.slice(root.length + 1)
+          touched = true
+        }
+        const collapsed = norm.replace(/node_modules\/\.pnpm\/[^/\n]+\/node_modules\//g, 'node_modules/')
+        if (collapsed !== norm) {
+          norm = collapsed
+          touched = true
+        }
+        if (touched) {
           changed = true
-          return '#region ' + norm.slice(root.length + 1)
+          return '#region ' + norm
         }
         return whole
       })
