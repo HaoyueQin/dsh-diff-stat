@@ -12,7 +12,7 @@
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![dsh plugin](https://img.shields.io/badge/dsh-plugin-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat) [![npm downloads](https://img.shields.io/npm/dt/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat)
-[![dsh](https://img.shields.io/badge/dsh-%E2%89%A50.1.1--rc-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+[![dsh](https://img.shields.io/badge/dsh-%E2%89%A50.1.2-rc.1-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 ![platform](https://img.shields.io/badge/platform-web-8A9CF5?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-success?style=flat-square)
@@ -27,7 +27,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web plugin
 
 ## Features
 
-- **Six releases, one build** — the same bundle serves harness `0.1.1-rc.2`, `0.1.2-alpha.1`, `0.1.2-alpha.2`, `0.1.2-alpha.3`, `0.1.2-alpha.4` and `0.1.2-alpha.5` (the alpha line's client-runtime package, view envelope and service names changed since rc.2, while alpha.1 → alpha.5 left every surface this plugin touches untouched); diff hunks are read from the tools' persisted wire `meta` on all six
+- **Kernel target: harness ≥ 0.1.2-rc.1** — one build for the current production line only: the `uiConversation` event registry, `tool.call.toolview` keyed slot and `conversation.chat.turnTail` chain ship their `0.1.2-rc.1+` shapes, and diff hunks are read from the tools' persisted wire `meta`. Harness `0.1.1-rc.x` and earlier (including the pre-`0.1.2-alpha.5` alpha line) are NOT supported by this version — install `dsh-diff-stat@0.1.6` (or an older release that covers them) on those kernels
 - **Inline +N −M badges** — takes over the stock mutation rows for `edit`, `write` and `str_replace_editor` (keyed lower-priority shadow; uninstall restores stock). Counts are the real changed lines — the same LCS walk the diff renders — estimated from the arguments while running, exact once the result settles
 - **Aligned diff window** — expanding a row opens a height-capped scrollable unified view. Both sides are LCS-aligned first: shared lines render as up to ±3 lines of context around each change, untouched runs collapse into ⋯, and the footer counts exactly the rendered rows
 - **Line-number gutters** — the file view numbers its lines 1..N and the diff window pins each hunk to its real position in the current file (one cached fenced read, uniqueness-checked): deleted rows read the old side, context/added rows the new side, with the changed rows' accent bars. A hunk that cannot be located (host absent, drifted file, over budget) numbers window-relatively 1..N, so the gutter always renders
@@ -83,15 +83,12 @@ pnpm typecheck      # both halves via tsc
 pnpm check:align    # diff aligner & data-model assertions (needs Node >= 23.6)
 ```
 
-> **Kernel compatibility note:** one built bundle targets six harness
-> releases — `0.1.1-rc.2`, `0.1.2-alpha.1`, `0.1.2-alpha.2`,
-> `0.1.2-alpha.3`, `0.1.2-alpha.4` and `0.1.2-alpha.5`. Compile-time
-> types are pinned to the `0.1.1-rc.2` devDependencies (later client-runtime
-> versions are not on public npm); compatibility with newer releases rests on
-> runtime shape checks (`narrowDiffs`, snapshot probing) over wire data that is
-> byte-identical across all six. A future release that renames or drops those
-> wire fields will pass `tsc` silently — verify against the newer release
-> before shipping.
+> **Kernel compatibility:** this build targets harness `>= 0.1.2-rc.1`
+> (compile-time types pinned to the `0.1.2-rc.1` devDependencies). The
+> `0.1.2-rc.1` release line shares every surface this plugin touches. Older
+> kernels (`0.1.1-rc.x`, the pre-`0.1.2-alpha.5` alpha line) need an older
+> plugin release — install `dsh-diff-stat@0.1.6` there. Every future release
+> note repeats this hint.
 
 ## Activity
 

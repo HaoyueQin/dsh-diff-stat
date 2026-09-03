@@ -10,7 +10,7 @@
  * fallback (the PTC/code-dispatch path, whose calls carry no wire view).
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { changedLineCounts, terminatorOnly } from './diff-align.ts'
 
 /** What the stock ui-tool rows pass to the `tool.call.toolview` keyed slots. */
@@ -222,10 +222,9 @@ function callToolName(block: ToolCallBlock): string {
 
 /**
  * The `diffs` array of an opaque tool/result `meta` payload, or null. The
- * edit/write tools persist `FsDiffMeta = { diffs: FileDiff[] }` there on both
- * supported kernel generations (0.1.1-rc.2 and 0.1.2-alpha.1 — the harness
- * dropped its presentation view envelope in the latter), making the wire
- * meta the one diff source this plugin can read on both.
+ * edit/write tools persist `FsDiffMeta = { diffs: FileDiff[] }` there (the
+ * harness >= 0.1.2-rc.1 contract), making the wire meta the one applied diff
+ * source this plugin reads.
  */
 function metaDiffs(meta: unknown): unknown {
   if (meta === null || typeof meta !== 'object') return null

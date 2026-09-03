@@ -12,7 +12,7 @@
 [![Awesome DSH Plugin](https://awesome-dsh-plugin.com/badge.svg)](https://awesome-dsh-plugin.com)
 [![dsh plugin](https://img.shields.io/badge/dsh-plugin-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 [![npm](https://img.shields.io/npm/v/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat) [![npm downloads](https://img.shields.io/npm/dt/dsh-diff-stat?style=flat-square)](https://www.npmjs.com/package/dsh-diff-stat)
-[![dsh](https://img.shields.io/badge/dsh-%E2%89%A50.1.1--rc-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+[![dsh](https://img.shields.io/badge/dsh-%E2%89%A50.1.2-rc.1-4D6BFE?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 ![platform](https://img.shields.io/badge/platform-web-8A9CF5?style=flat-square)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![i18n](https://img.shields.io/badge/i18n-zh%20%7C%20en-success?style=flat-square)
@@ -27,7 +27,7 @@
 
 ## 功能
 
-- **一份构建，六版内核** — 同一产物同时适配 harness `0.1.1-rc.2`、`0.1.2-alpha.1`、`0.1.2-alpha.2`、`0.1.2-alpha.3`、`0.1.2-alpha.4` 与 `0.1.2-alpha.5`（alpha 线的 client-runtime 包、视图信封与服务名自 rc.2 起均已变更，而 alpha.1 → alpha.5 未触及插件使用的任何表面）；diff hunk 在六版都读自工具持久化的 wire `meta`
+- **内核目标：harness ≥ 0.1.2-rc.1** — 单一构建，仅面向现行 rc 产线：`uiConversation` 事件注册表、`tool.call.toolview` keyed 槽与 `conversation.chat.turnTail` 链均为 `0.1.2-rc.1+` 形态，diff hunk 读自工具持久化的 wire `meta`。harness `0.1.1-rc.x` 及更早（含 `0.1.2-alpha.5` 之前的 alpha 线旧阶段）**不在**本版本支持范围——请在这些内核上安装 `dsh-diff-stat@0.1.6`（或更早覆盖它们的旧版本）
 - **行内 +N −M 徽标** — 接管 `edit`、`write` 与 `str_replace_editor` 的 stock 变更行（keyed 低优先阴影，卸载自动还原）。计数是真实变更行数——与 diff 渲染共用同一趟 LCS：运行中按参数预估，结算后取精确值
 - **对齐 diff 窗口** — 点击行展开限高滚动的 unified 视图。两侧先做行级 LCS 对齐：共同行渲染为变更处 ±3 行上下文，更远的未变更区间折叠为 ⋯；页脚统计与正文渲染完全同源
 - **行号槽** — 文件视图按 1..N 编号；diff 窗口把每个 hunk 钉到当前文件中的真实位置（一次缓存围栏读取、唯一性校验）：删除行读旧侧号码、上下文/新增行读新侧号码，变更行带左缘色条；无法定位的 hunk（host 缺席、文件已再改动、超预算）退回窗口内 1..N 相对编号，行号槽始终渲染
@@ -83,13 +83,11 @@ pnpm typecheck      # 双端 tsc
 pnpm check:align    # 对齐引擎与数据模型断言（需 Node >= 23.6）
 ```
 
-> **内核兼容性说明：** 同一构建产物同时面向六个内核版本 —— `0.1.1-rc.2`、
-> `0.1.2-alpha.1`、`0.1.2-alpha.2`、`0.1.2-alpha.3`、`0.1.2-alpha.4` 与
-> `0.1.2-alpha.5`。编译期类型钉在 `0.1.1-rc.2` 的
-> devDependencies 上（其后的 client-runtime 版本未发布公网 npm）；对新版本
-> 的兼容性依赖运行时形状校验（`narrowDiffs`、快照探测），其消费的 wire
-> 数据在六版逐字节一致。未来内核若改名或删除这些 wire 字段，`tsc` 不会
-> 报错 —— 发版前请对新版本实测验证。
+> **内核兼容性：** 本构建面向 harness `>= 0.1.2-rc.1`（编译期类型钉在
+> `0.1.2-rc.1` 的 devDependencies 上）。`0.1.2-rc.1` rc 线与插件接触的每处
+> 表面一致。更旧的内核（`0.1.1-rc.x`、`0.1.2-alpha.5` 之前的 alpha 线）
+> 需安装旧版本插件 —— 请使用 `dsh-diff-stat@0.1.6`。未来每个版本的发布
+> 说明都会重复此提示。
 
 ## Activity
 

@@ -15,15 +15,13 @@
  * merge fresh hunk identities, breaking the card's exact-identity review
  * gate: expanded diffs snapped shut on the next streaming chunk.
  */
-import type { ToolChatData } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ToolCallBlock, ToolChatData } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ChangedFile } from './turn-changes.ts'
 import { collectDispatchFiles } from './turn-merge.ts'
 
 /**
- * Structural faces of the stock chat projection the join reads. The two
- * supported kernel generations shape these identically (verified against the
- * 0.1.1-rc.2 and 0.1.2-alpha wires).
+ * Structural faces of the stock chat projection the join reads (the harness
+ * >= 0.1.2-rc.1 shape).
  */
 export interface TurnJoinStores {
   getTurn: (turn: number) => readonly string[]

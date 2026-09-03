@@ -8,7 +8,7 @@
  * so the alignment check script can exercise them directly.
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { callTimeDiffs, isMutationToolName, markArgHunks } from './diff-contract.ts'
 import type { ChangedFile, TurnChangesTurnData } from './turn-changes.ts'
 

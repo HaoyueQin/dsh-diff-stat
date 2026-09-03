@@ -14,12 +14,11 @@ import {
   IconChevronDownOutline14, IconChevronRightOutline14,
   IconCopyOutline16, IconFolderOpen16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { UseChat } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
-import type {
-  ConversationSnapshot, TurnLocation, UseConversationSession,
-} from '@deepseek-ai/dsh-client-runtime/client'
+import type { TurnLocation } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
 import { mergeChangedFiles } from './turn-merge.ts'
@@ -51,8 +50,8 @@ export type TurnCardProps = {
   sessionId?: string | undefined
   /** Read the session workspace root, for relative-path copy. Absent → copy falls back to the absolute path. */
   getCwd?: ((sessionId: string | undefined) => string | undefined) | undefined
-  /** Session snapshot reader (slot standard prop); joins the dispatch sub-calls. */
-  useSession?: UseConversationSession | undefined
+  /** Chat-target snapshot reader (slot standard prop); joins the dispatch sub-calls. */
+  useChat?: UseChat | undefined
 } & Pick<TurnTailOwnerProps, 'openFile'> & PropsLocale<typeof NS>
 
 /** Totals across files, for the collapsed bar. */
@@ -72,13 +71,7 @@ function totals(files: readonly ChangedFile[]): { added: number; removed: number
  * @param props - matched files from the slot select, plus the opener and cwd reader.
  */
 export function TurnCard(props: TurnCardProps) {
-  const { matched, turn, sessionId, openFile, getCwd, t } = props
-  // The session-reading standard prop changed across kernel generations:
-  // 0.1.1-rc.2 passes `useSession` (selector over the whole
-  // ConversationSnapshot), 0.1.2-alpha.1 passes `useChat` (selector over the
-  // Chat target snapshot). Resolve either; the join below reads the chat
-  // slice off whichever shape arrived.
-  const useSession = (props as TurnCardProps & { useChat?: UseConversationSession }).useChat ?? props.useSession
+  const { matched, turn, sessionId, openFile, getCwd, t, useChat } = props
   const [expanded, setExpanded] = useState(false)
   const [openFilePath, setOpenFilePath] = useState<string | null>(null)
   const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set())
@@ -102,20 +95,13 @@ export function TurnCard(props: TurnCardProps) {
   // lives in the pure turn-join module (check-turn-join.mjs pins the cache
   // contract), so later turns streaming in the same session cannot re-parse
   // this tree on every chunk.
-  const snapshot = useSession?.(s => s)
+  const snapshot = useChat === undefined ? undefined : useChat((s) => s)
   const joinCache = useRef<TurnJoinCache | null>(null)
   const dispatchFiles = useMemo(() => {
     if (snapshot === undefined || turn === undefined) return EMPTY_FILES
-    // 0.1.1-rc.2 nests the chat projection under `.chat` on the whole
-    // ConversationSnapshot; 0.1.2-alpha.1 hands the Chat target snapshot
-    // itself (which already IS the chat slice). Either way `chat` below is
-    // the ChatSnapshot with `locations`/`nodes`.
-    const chat = (snapshot as ConversationSnapshot & { chat?: ConversationSnapshot | undefined }).chat ?? snapshot
-    if (chat === undefined) return EMPTY_FILES
-    const locations = (chat as { locations?: { getTurn: (turn: number) => readonly string[] } | undefined }).locations
-    const nodesStore = (chat as { nodes?: { get: (key: string) => unknown } | undefined }).nodes
-    if (locations === undefined || nodesStore === undefined) return EMPTY_FILES
-    const joined = extractDispatchFiles(locations, nodesStore, turn.turn, joinCache.current)
+    // The Chat target snapshot already IS the chat slice: `locations` and
+    // `nodes` own the tool tree this Turn's run_code sub-calls live in.
+    const joined = extractDispatchFiles(snapshot.locations, snapshot.nodes, turn.turn, joinCache.current)
     joinCache.current = joined.next
     return joined.files
   }, [snapshot, turn])

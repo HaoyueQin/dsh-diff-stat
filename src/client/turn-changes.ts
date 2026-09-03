@@ -2,36 +2,18 @@
  * Turn-scoped changed-file accumulator for dsh-diff-stat. Client-only and
  * model-free: files and hunks come from the wire layer — the applied hunks
  * the mutation tools persist on the tool/result event's `meta`
- * (FsDiffMeta, byte-identical across the two supported kernel generations),
+ * (FsDiffMeta, the harness >= 0.1.2-rc.1 contract),
  * or the argument fallback for Code Dispatch (PTC) sub-calls, whose wire
  * records carry no meta — never from the closing prose. Structure follows
  * the official ui-deliverables turn accumulator (publishes Turn data,
  * renders no view Node of its own).
  */
-import type { ConversationMatch, ConversationNodeDefinition } from '@deepseek-ai/dsh-client-runtime/client'
+import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
+import type { ConversationMatch, ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { mutationHunks } from './diff-contract.ts'
 import { claimFor } from './turn-merge.ts'
-
-/** Message-producing event types that can join the model-visible surface
- *  (core's `SurfaceEventType` — byte-identical across the two kernel
- *  generations this build supports). */
-const SURFACE_EVENT_TYPES = new Set<string>(['user/message', 'assistant/message', 'tool/result'])
-
-/**
- * Local copy of core's append-origin surface predicate, inlined from
- * `@deepseek-ai/dsh-session/surface` (byte-identical in 0.1.1-rc.2 and
- * 0.1.2-alpha.1). The runtime re-export this module used to import was
- * removed with the runtime package in 0.1.2-alpha.1, and importing the core
- * subpath directly would add a dynamic module-table request the built bundle
- * cannot resolve on older kernels — a pure local copy keeps the bundle
- * self-contained on both. ponytail: if the core predicate ever grows beyond
- * type + `surfaceOp === 'append'`, re-import it and inline at build time.
- */
-function isAppendSurfaceEvent(event: { readonly type: string; readonly surfaceOp?: unknown }): boolean {
-  return SURFACE_EVENT_TYPES.has(event.type) && event.surfaceOp === 'append'
-}
 
 /** One settled mutation's file and hunks, in settlement order. */
 interface ChangedEntry {
@@ -49,7 +31,7 @@ export interface TurnChangesTurnData {
   readonly hasCodeDispatch: boolean
 }
 
-declare module '@deepseek-ai/dsh-client-runtime/client' {
+declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
   interface ConversationTurnDataMap {
     /** Successful mutation hunks accumulated in this Turn (dsh-diff-stat). */
     'diff-stat': TurnChangesTurnData
@@ -192,30 +174,25 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
   if (dispatch !== null) {
     // PTC evidence stands on its own: a dispatch record exists only inside a
     // run_code run, so this turn ran code dispatch. Hunks NEVER come from the
-    // record's args here — the wire carries an arguments OBJECT on both
-    // supported kernel generations (verified against the 0.1.1-rc.2 and
-    // 0.1.2-alpha.1 fixtures), and the card joins the files from the chat
-    // tool tree. Deriving hunks from a string form would double-count with
-    // that join, so the record contributes evidence only.
+    // record's args here — the wire carries an arguments object, and the card
+    // joins the files from the chat tool tree. Deriving hunks from a string
+    // form would double-count with that join, so the record contributes
+    // evidence only.
     return { ...state, hasCodeDispatch: true }
   }
   return state
 }
 
 /**
- * The engine-owned turn coordinate of a match: its resolved Location when the
- * engine placed it (the authoritative axis — wire dispatch records carry no
- * turn field, so this is the only way a window-start dispatch match can seed
- * the fold), else the event's explicit turn field (older kernels).
+ * The engine-owned turn coordinate of a match: its resolved Location. Wire
+ * dispatch records carry no turn field, so a window-start dispatch match
+ * lands on the Context id seed in foldMatches instead (see below).
  */
 function matchTurn(match: ConversationMatch): number | undefined {
   const location = match.location
-  if (location.kind === 'step' || location.kind === 'turn') {
-    const turn = location.turn?.turn
-    if (typeof turn === 'number') return turn
-  }
-  const direct = (match.event.data as { turn?: unknown }).turn
-  return typeof direct === 'number' ? direct : undefined
+  return location.kind === 'step' || location.kind === 'turn'
+    ? location.turn?.turn
+    : undefined
 }
 
 /**
@@ -237,13 +214,11 @@ function foldMatches(matches: readonly ConversationMatch[], contextTurn?: number
     }
     if (state === undefined) {
       // Window-start match may be any event type; only the turn coordinate
-      // seeds the fold — the engine Location (authoritative for wire records
-      // without a turn field), then the event's own field, then the Context
-      // id this match was routed under. The LAST one is the only guaranteed
-      // coordinate for a window-start dispatch record: the runtime Location
-      // index resolves a coordinate-less event to 'session' (verified
-      // against the 0.1.1-rc.2 client-runtime), so Location alone would
-      // fall through exactly when it is needed most.
+      // seeds the fold — the engine Location first, then the Context id this
+      // match was routed under. The latter is the guaranteed coordinate for a
+      // window-start dispatch record: the Location index resolves a
+      // coordinate-less event to 'session', so Location alone would fall
+      // through exactly when it is needed most.
       const turn = matchTurn(match) ?? contextTurn
       if (turn === undefined) continue
       state = { turn, calls: new Map(), changed: [], hasCodeDispatch: false }
@@ -286,16 +261,13 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
     }
     const dispatch = codeDispatchData(event)
     if (dispatch !== null) {
-      // Old-kernel records carried an explicit turn coordinate (kept for
-      // 0.1.1-rc.2); the current wire omits it, so fall back to the Turn
-      // learned from the root call. Neither available → this event cannot be
-      // routed and stays outside every Turn context (best effort, as before).
-      const explicit = dispatch['turn']
+      // The wire omits a turn coordinate on dispatch records, so route by the
+      // Turn learned from the root call's tool/call. Neither available → this
+      // event cannot be routed and stays outside every Turn context.
       const learned = typeof dispatch['rootCallId'] === 'string'
         ? rootCallTurn.get(dispatch['rootCallId'])
         : undefined
-      const turn = typeof explicit === 'number' ? explicit : learned
-      return typeof turn === 'number' ? { id: String(turn), role: 'update' } : null
+      return typeof learned === 'number' ? { id: String(learned), role: 'update' } : null
     }
     return null
   },

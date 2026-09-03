@@ -45,7 +45,15 @@ const PLATFORM_MODULES = [
 ] as const
 
 /** Externals resolved from the loader module table. */
-const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES, '@deepseek-ai/dsh-client-runtime/client']
+const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES]
+
+/** Inline-safe @deepseek-ai wire layers with no shared runtime identity (the
+ *  stock client preset's own INLINE_SAFE policy, narrowed to the two pure
+ *  layers this bundle actually pulls in): dsh-session's surface predicate
+ *  and its dsh-brand branding helpers are pure functions, inlined exactly
+ *  like the stock ui bundles inline them — no module-table request, no
+ *  cross-plugin runtime identity. */
+const INLINE_SAFE = /^@deepseek-ai\/dsh-(?:session|brand)(?:\/|$)/
 
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
@@ -96,9 +104,12 @@ const clientBundle: UserConfig = {
     resolveId(source: string) {
       if (!source.startsWith('@deepseek-ai/')) return null
       if (CLIENT_EXTERNALS.includes(source)) return null
+      if (INLINE_SAFE.test(source)) return null
       throw new Error(
-        'client bundle purity: "' + source + '" is not a platform module (CLIENT_EXTERNALS) — '
-        + 'cross-plugin value imports are forbidden; collaborate through cordis services',
+        'client bundle purity: "' + source + '" is not a platform module (CLIENT_EXTERNALS), '
+        + 'not an inline-safe wire layer (INLINE_SAFE), and not an @deepseek-ai import the '
+        + 'bundle inlines by default — cross-plugin value imports are forbidden; collaborate '
+        + 'through cordis services',
       )
     },
   }, {

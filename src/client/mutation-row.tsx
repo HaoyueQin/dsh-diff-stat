@@ -17,7 +17,7 @@ import clsx from 'clsx'
 import {
   DisclosureRow, IconEditOutline16, IconInspectOutline12, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 // The stock row's stylesheet, vendored verbatim into ./tool-row.module.css
 // (the npm ui-tool tarball omits src/) and inlined — the takeover row renders
 // with the exact stock chrome.
