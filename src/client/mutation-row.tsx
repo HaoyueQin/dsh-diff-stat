@@ -18,6 +18,8 @@ import {
   DisclosureRow, IconEditOutline16, IconInspectOutline12, StateDot,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
+// The stock summary pipeline's home abbreviation (pure util, inlined at build).
+import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 // The stock row's stylesheet, vendored verbatim into ./tool-row.module.css
 // (the npm ui-tool tarball omits src/) and inlined — the takeover row renders
 // with the exact stock chrome.
@@ -51,7 +53,7 @@ function firstLine(text: string): string {
 }
 
 /** Derive the row model for the edit/write variants (stock toolRowModel mirror). */
-function rowModel(toolName: string, block: ToolCallBlock, cwd?: string): {
+function rowModel(toolName: string, block: ToolCallBlock, cwd?: string, home?: string): {
   variant: ToolRowVariant
   title: string
   summary: string
@@ -72,14 +74,18 @@ function rowModel(toolName: string, block: ToolCallBlock, cwd?: string): {
     ? (typeof parsed['file_path'] === 'string' && parsed['file_path'] !== '' ? parsed['file_path']
       : typeof parsed['path'] === 'string' ? parsed['path'] : undefined)
     : undefined
-  // Workspace-rooted paths display relative to the session cwd (stock rule).
+  // Workspace-rooted paths display relative to the session cwd, then leftover
+  // POSIX home paths abbreviate to `~` — the stock toolRowModel pipeline
+  // (relativizeToCwd → abbreviateHomePath).
   const rel = (text: string): string => {
     if (cwd === undefined || cwd === '') return text
     const root = cwd.replace(/[/\\]+$/, '')
     if (text.startsWith(root + '/') || text.startsWith(root + '\\')) return text.slice(root.length + 1)
     return text
   }
-  const summary = path !== undefined ? rel(path) : firstLine(argsRaw === '' ? block.callId : argsRaw)
+  const summary = path !== undefined
+    ? abbreviateHomePath(rel(path), home)
+    : firstLine(argsRaw === '' ? block.callId : argsRaw)
   const output = done ? (resultText(block) || null) : null
   return {
     variant,
@@ -118,6 +124,8 @@ export interface MutationRowProps {
   toolName: string
   block: ToolCallBlock
   cwd?: string | undefined
+  /** Host account home; POSIX home-rooted summaries display as `~`. */
+  home?: string | undefined
   openFile: (path: string) => void
   inspect?: (() => void) | undefined
 }
@@ -129,13 +137,13 @@ export interface MutationRowProps {
  * summary line.
  * @param props - toolview owner currency.
  */
-export function MutationRow({ toolName, block, cwd, openFile, inspect }: MutationRowProps) {
+export function MutationRow({ toolName, block, cwd, home, openFile, inspect }: MutationRowProps) {
   // Spec: every row starts collapsed; expansion is user-driven only.
   const [expanded, setExpanded] = useState(false)
   // Stable derivations: the settled block is frozen, and the arg fallback
   // rebuilds its hunks per call, so without the memo both the boost effect's
   // dependencies and the WeakSet arg marks would churn every render.
-  const model = useMemo(() => rowModel(toolName, block, cwd), [toolName, block, cwd])
+  const model = useMemo(() => rowModel(toolName, block, cwd, home), [toolName, block, cwd, home])
   const diff = useMemo(() => diffCardModel(block), [block])
   const diffBody = diff ?? null
   // diffStats runs the LCS DP now — keep it off the per-render path.
@@ -206,7 +214,7 @@ export function MutationRow({ toolName, block, cwd, openFile, inspect }: Mutatio
               <>
                 <span className={rowCss.sep} aria-hidden />
                 {fileLink ? (
-                  <button type="button" className={clsx(rowCss.fileLink, badgeCss.linkFit)} title={summaryText} onClick={openFilePath} onKeyDown={fileLinkKeyDown}>
+                  <button type="button" className={rowCss.fileLink} title={summaryText} onClick={openFilePath} onKeyDown={fileLinkKeyDown}>
                     {summaryText}
                   </button>
                 ) : (

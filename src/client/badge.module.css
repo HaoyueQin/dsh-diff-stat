@@ -16,14 +16,3 @@
 .del {
 	color: var(--dsw-alias-state-error-primary);
 }
-
-/* vendored 基线（alpha.1）的 .fileLink 是 flex: 1 1 auto（撑满整行）——这里对齐
-   alpha.2 上游的 shrink-to-fit：flex: 0 1 auto ⇒ 宽度 = min(内容宽, 剩余行宽)。
-   窗口宽则完整显示路径，行点击回落到 DisclosureRow 的展开切换（只有点在路径
-   文本上才触发 openFile），窄行时让位给 +N −M badge 并出省略号。
-   只覆盖 flex 这一个属性：min-width:0 / nowrap / ellipsis 都由 .fileLink 自带。
-   不要在此加 display:inline-flex（flex 容器不吃 text-overflow，省略号会变成
-   硬裁切）或 max-width 定宽帽（窗口再宽也恒被截断）——两者都已踩过坑。 */
-.linkFit {
-	flex: 0 1 auto;
-}

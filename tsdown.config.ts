@@ -48,12 +48,12 @@ const PLATFORM_MODULES = [
 const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES]
 
 /** Inline-safe @deepseek-ai wire layers with no shared runtime identity (the
- *  stock client preset's own INLINE_SAFE policy, narrowed to the two pure
- *  layers this bundle actually pulls in): dsh-session's surface predicate
- *  and its dsh-brand branding helpers are pure functions, inlined exactly
- *  like the stock ui bundles inline them — no module-table request, no
- *  cross-plugin runtime identity. */
-const INLINE_SAFE = /^@deepseek-ai\/dsh-(?:session|brand)(?:\/|$)/
+ *  stock client preset's own INLINE_SAFE policy, narrowed to the pure layers
+ *  this bundle actually pulls in): dsh-session's surface predicate, its
+ *  dsh-brand branding helpers and the dsh-util-workspace-path display helpers
+ *  are pure functions, inlined exactly like the stock ui bundles inline them
+ *  — no module-table request, no cross-plugin runtime identity. */
+const INLINE_SAFE = /^@deepseek-ai\/dsh-(?:session|brand|util-workspace-path)(?:\/|$)/
 
 const CSS_VIRTUAL_PREFIX = '\0dsh-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'

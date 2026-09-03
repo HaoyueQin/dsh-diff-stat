@@ -22,6 +22,11 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+// `@deepseek-ai/dsh-client-store` sits in devDependencies for TYPE resolution
+// only: the published ui-chat/client .d.ts references the store without
+// declaring it (its own store entry is a devDependency, stripped on publish),
+// so pnpm's isolated layout resolves it from this package's root. Removing it
+// breaks typecheck (UseChat degrades to `any`).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
