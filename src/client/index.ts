@@ -16,7 +16,8 @@
  * Kernel contract: DeepSeek Harness >= 0.1.2-rc.1. The `uiConversation`
  * event registry, the `tool.call.toolview` keyed slot and the
  * `conversation.chat.turnTail` chain all carry their 0.1.2-rc.1+ shapes
- * (later 0.1.2-rc.x releases touch none of the plugin's surfaces);
+ * (verified against DSH master 76fda72979 = rc.1 + 99 commits: no rc-line
+ * change touches the plugin's surfaces yet — re-verify per new rc);
  * harnesses before that line need dsh-diff-stat <= 0.1.6.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'

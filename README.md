@@ -84,11 +84,12 @@ pnpm check:align    # diff aligner & data-model assertions (needs Node >= 23.6)
 ```
 
 > **Kernel compatibility:** this build targets harness `>= 0.1.2-rc.1`
-> (compile-time types pinned to the `0.1.2-rc.1` devDependencies). The
-> `0.1.2-rc.1` release line shares every surface this plugin touches. Older
-> kernels (`0.1.1-rc.x`, the pre-`0.1.2-alpha.5` alpha line) need an older
-> plugin release — install `dsh-diff-stat@0.1.6` there. Every future release
-> note repeats this hint.
+> (compile-time types pinned to the `0.1.2-rc.1` devDependencies). Every
+> `0.1.2-rc` kernel so far shares every surface this plugin touches —
+> verified against DSH master `76fda72979` (rc.1 + 99 commits); re-verify
+> against each new rc before shipping. Older kernels (`0.1.1-rc.x`, the
+> pre-`0.1.2-alpha.5` alpha line) need an older plugin release — install
+> `dsh-diff-stat@0.1.6` there. Every future release note repeats this hint.
 
 ## Activity
 
