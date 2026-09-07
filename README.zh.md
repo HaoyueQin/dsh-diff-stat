@@ -27,8 +27,8 @@
 
 ## 功能
 
-- **内核目标：harness ≥ 0.1.2-rc.1** — 单一构建，仅面向现行 rc 产线：`uiConversation` 事件注册表、`tool.call.toolview` keyed 槽与 `conversation.chat.turnTail` 链均为 `0.1.2-rc.1+` 形态，diff hunk 读自工具持久化的 wire `meta`。harness `0.1.1-rc.x` 及更早（含 `0.1.2-alpha.5` 之前的 alpha 线旧阶段）**不在**本版本支持范围——请在这些内核上安装 `dsh-diff-stat@0.1.6`（或更早覆盖它们的旧版本）
-- **行内 +N −M 徽标** — 接管 `edit`、`write` 与 `str_replace_editor` 的 stock 变更行（keyed 低优先阴影，卸载自动还原）。计数是真实变更行数——与 diff 渲染共用同一趟 LCS：运行中按参数预估，结算后取精确值
+- **内核目标：harness ≥ 0.1.2-rc.1** — 单一构建，同时覆盖 rc 产线与 `0.1.3-alpha.2`：`uiConversation` 事件注册表、`tool.call.toolview` keyed 槽与 `conversation.chat.turnTail` 链均为 `0.1.2-rc.1+` 形态，diff hunk 读自工具持久化的 wire `meta`。harness `0.1.1-rc.x` 及更早（含 `0.1.2-alpha.5` 之前的 alpha 线旧阶段）**不在**本版本支持范围——请在这些内核上安装 `dsh-diff-stat@0.1.6`（或更早覆盖它们的旧版本）
+- **行内 +N −M 徽标** — 接管 `edit`、`write` 与 `str_replace_editor` 的 stock 变更行（`str_replace_editor` 自 harness `0.1.3-alpha.2` 起为按需启用，默认关闭；keyed 低优先阴影，卸载自动还原）。计数是真实变更行数——与 diff 渲染共用同一趟 LCS：运行中按参数预估，结算后取精确值
 - **对齐 diff 窗口** — 点击行展开限高滚动的 unified 视图。两侧先做行级 LCS 对齐：共同行渲染为变更处 ±3 行上下文，更远的未变更区间折叠为 ⋯；页脚统计与正文渲染完全同源
 - **行号槽** — 文件视图按 1..N 编号；diff 窗口把每个 hunk 钉到当前文件中的真实位置（一次缓存围栏读取、唯一性校验）：删除行读旧侧号码、上下文/新增行读新侧号码，变更行带左缘色条；无法定位的 hunk（host 缺席、文件已再改动、超预算）退回窗口内 1..N 相对编号，行号槽始终渲染
 - **轮末汇总卡** — 每轮消息流尾部折叠条「N files changed +X −Y」；逐文件行含类型图标、目录、±行数、审查、打开 ▾ 与撤销，同文件多次编辑按结算顺序合并累计
@@ -49,7 +49,7 @@
 
 ## 机制
 
-- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行；diff 数据按权威链提取：工具持久化的 wire meta（含 ±3 行文件上下文），PTC 子调用回退到调用时参数推导——窗口截断丢掉调用头时仍可从 result meta 渲染
+- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行（`str_replace_editor` 自 harness `0.1.3-alpha.2` 起为按需启用）；diff 数据按权威链提取：工具持久化的 wire meta（含 ±3 行文件上下文），PTC 子调用回退到调用时参数推导——窗口截断丢掉调用头时仍可从 result meta 渲染
 - **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start`、`tool/call`、`tool/result(append)`、`tool/code-dispatch`）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染——结构遵循官方 `ui-deliverables` 模式。Code-Dispatch 文件从 stock 会话工具树 join：其 `tool-call` 节点已把每个 dispatch 按 rootCallId 折叠进根调用的 `subCalls`
 - **上下文增强**：参数来源的 hunk 在构造时按对象身份标记；展开时增强器经围栏 API 读取文件（LRU 缓存）、定位片段的 after 形态并以共享行重建 hunk，无法定位的原样渲染
 - **host 半**（可选）：同源前缀路由提供围栏 API（files.read、每轮快照 capture、undo、open-with）——realpath 包含性解析前后双查、符号链接拒绝、UTF-8 回环校验、显示读取 512 KiB 上限并带截断标记、undo 32 MiB 门限、原子写；host 半缺席时相关操作自动隐藏
@@ -83,12 +83,9 @@ pnpm typecheck      # 双端 tsc
 pnpm check:align    # 对齐引擎与数据模型断言（需 Node >= 23.6）
 ```
 
-> **内核兼容性：** 本构建面向 harness `>= 0.1.2-rc.1`（编译期类型钉在
-> `0.1.2-rc.1` 的 devDependencies 上）。迄今每个 `0.1.2-rc` 内核与插件接触
-> 的每处表面一致——已对 DSH master `76fda72979`（rc.1 + 99 个提交）核对，
-> 每个新 rc 发布前请重新核对。更旧的内核（`0.1.1-rc.x`、`0.1.2-alpha.5`
-> 之前的 alpha 线）需安装旧版本插件 —— 请使用 `dsh-diff-stat@0.1.6`。未来
-> 每个版本的发布说明都会重复此提示。
+> **内核兼容性：** 本构建面向 harness `>= 0.1.2-rc.1`（单一构建覆盖 rc
+> 产线与 `0.1.3-alpha.2`）。更旧的内核（`0.1.1-rc.x`、`0.1.2-alpha.5`
+> 之前的 alpha 线）需安装旧版本插件 —— 请使用 `dsh-diff-stat@0.1.6`。
 
 ## Activity
 

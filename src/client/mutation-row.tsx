@@ -127,6 +127,8 @@ export interface MutationRowProps {
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
   openFile: (path: string) => void
+  /** Dual-kernel收容(见 diff-contract ToolCallOwnerProps):alpha.2 新增,本行不消费。 */
+  loadImage?: unknown
   inspect?: (() => void) | undefined
 }
 

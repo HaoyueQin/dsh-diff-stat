@@ -27,6 +27,13 @@ export interface ToolCallOwnerProps {
   home?: string | undefined
   /** Open a Tool argument path through the Host. */
   openFile: (path: string) => void
+  /**
+   * Dual-kernel收容: harness 0.1.3-alpha.2 起 stock owner 新增必填 `loadImage`
+   * (图片槽 `tool.call.images` 的会话授权加载器,本插件不消费)。声明为可选
+   * `unknown` —— rc.1 无此字段时缺席合法,alpha.2 有此字段时忽略合法;
+   * `unknown` 避免引入新类型依赖,纯类型位不触达 client 打包纯度门。
+   */
+  loadImage?: unknown
   /** Inspect this call in the trajectory view when available. */
   inspect?: (() => void) | undefined
 }
@@ -152,9 +159,9 @@ export function diffStats(diffs: readonly DiffHunk[]): DiffStats {
 
 /**
  * Whether a wire Tool name is one of the file-mutation tools this plugin
- * takes over and counts. `str_replace_editor` is the minimal agent preset's
- * editor (command-dispatched: create / str_replace / insert; its read-only
- * `view` maps to no hunks below).
+ * takes over and counts. `str_replace_editor` is the opt-in editor (off by
+ * default since harness 0.1.3-alpha.2; command-dispatched: create /
+ * str_replace / insert; its read-only `view` maps to no hunks below).
  * @param name - the wire Tool name.
  */
 export function isMutationToolName(name: string): boolean {
@@ -165,8 +172,8 @@ export function isMutationToolName(name: string): boolean {
  * The call-time diff hunks the mutation tools' own `presentCall` derives from
  * their arguments: an edit renders its literal old_string→new_string
  * replacement, a write renders its full content as a create (`oldText: null`,
- * which also represents an overwrite without prior content), and the minimal
- * preset's str_replace_editor maps its create/str_replace/insert commands to
+ * which also represents an overwrite without prior content), and the opt-in
+ * str_replace_editor maps its create/str_replace/insert commands to
  * the same shapes over its `path`/`old_str`/`new_str`/`file_text` arguments
  * (its read-only `view` maps to nothing). Code Dispatch sub-calls never carry
  * a wire view (the dispatch bridge logs no presentation metadata), so this

@@ -13,12 +13,13 @@
  * the same argument fallback) and claims the chat turn-tail chain with a
  * collapsible per-turn summary card.
  *
- * Kernel contract: DeepSeek Harness >= 0.1.2-rc.1. The `uiConversation`
- * event registry, the `tool.call.toolview` keyed slot and the
- * `conversation.chat.turnTail` chain all carry their 0.1.2-rc.1+ shapes
- * (verified against DSH master 76fda72979 = rc.1 + 99 commits: no rc-line
- * change touches the plugin's surfaces yet — re-verify per new rc);
- * harnesses before that line need dsh-diff-stat <= 0.1.6.
+ * Kernel contract: DeepSeek Harness >= 0.1.2-rc.1 (single build covers the
+ * rc line and 0.1.3-alpha.2). The `uiConversation` event registry, the
+ * `tool.call.toolview` keyed slot and the `conversation.chat.turnTail` chain
+ * all carry their 0.1.2-rc.1+ shapes (verified against DSH master 76fda72979
+ * and dsh-v0.1.3-alpha.2 e379fa8bdd: the only owner-currency delta is the new
+ * optional `loadImage`, which this plugin accepts and ignores — re-verify per
+ * new rc); harnesses before that line need dsh-diff-stat <= 0.1.6.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -52,7 +53,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'sessions', 'locale', 'uiConversation']
 
 /** The tool keys this plugin takes over (the wire tools that emit diff cards).
- *  `str_replace_editor` is the minimal agent preset's editor. */
+ *  `str_replace_editor` is the opt-in editor (off by default since harness
+ *  0.1.3-alpha.2; kept so manually enabled profiles still get badges). */
 const MUTATION_TOOLS = ['edit', 'write', 'str_replace_editor'] as const
 
 /**
