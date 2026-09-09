@@ -45,11 +45,13 @@ export function FilePeek({ path, cwd, onClose, t }: FilePeekProps) {
         // after the fetch must re-render the message in the new language.
         setState({ kind: 'error', key: 'hostUnavailable' })
       } else if (result.kind === 'binary') {
-        setState({ kind: 'binary', size: result.size ?? 0 })
+        const size = typeof result.size === 'number' && Number.isFinite(result.size) ? result.size : 0
+        setState({ kind: 'binary', size })
       } else if (typeof result.content !== 'string') {
         setState({ kind: 'error', key: 'readFailed', detail: result.error })
       } else {
-        setState({ kind: 'text', content: result.content, truncated: result.truncated === true, size: result.size ?? 0 })
+        const size = typeof result.size === 'number' && Number.isFinite(result.size) ? result.size : result.content.length
+        setState({ kind: 'text', content: result.content, truncated: result.truncated === true, size })
       }
     })()
     return () => { alive = false }

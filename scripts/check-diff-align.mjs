@@ -12,7 +12,8 @@ import {
 import { terminatorOnly, terminatorRows } from '../src/client/diff-align.ts'
 import { turnChangesDefinition } from '../src/client/turn-changes.ts'
 import { boostHunkWithContext, BOOST_CONTEXT_LINES } from '../src/client/context-boost.ts'
-import { callTimeDiffs, isArgHunk, markArgHunks } from '../src/client/diff-contract.ts'
+import { appliedHunks, callTimeDiffs, isArgHunk, markArgHunks, MAX_HUNK_CHARS, MAX_WIRE_HUNKS, narrowDiffs, parseArgs } from '../src/client/diff-contract.ts'
+import { basename } from '../src/client/turn-changes.ts'
 import { classifyCreate, createRefusalError, snapshotProbeFrom } from '../src/undo-plan.ts'
 
 const kinds = rows => rows.map(r => r.kind)
@@ -376,6 +377,36 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   }, 'turn')
   assert.ok(locationDataNew !== null)
   assert.equal(locationDataNew.value.hasCodeDispatch, true)
+  // -start-only fold: settling has not arrived yet, evidence still sets.
+  const startOnly = turnChangesDefinition.buildLocationData({
+    matches: [
+      { event: dispatchStartNew, role: 'update', location: { kind: 'turn', turn: { turn } } },
+    ],
+  }, 'turn')
+  assert.ok(startOnly !== null)
+  assert.equal(startOnly.value.hasCodeDispatch, true)
+  assert.equal(startOnly.value.changed.length, 0)
+  // Unknown root: unrouted (best-effort cold-open limit, never throws).
+  assert.equal(turnChangesDefinition.match({ type: 'tool/ptc-dispatch', data: { rootCallId: 'never-seen' } }), null)
+  assert.equal(turnChangesDefinition.match({ type: 'tool/code-dispatch-start', data: {} }), null)
+  // Mixed vocabularies in one turn share the same evidence bit.
+  const mixed = turnChangesDefinition.buildLocationData({
+    matches: [
+      { event: dispatchEvent, role: 'update', location: { kind: 'turn', turn: { turn } } },
+      { event: dispatchEventNew, role: 'update', location: { kind: 'turn', turn: { turn } } },
+    ],
+  }, 'turn')
+  assert.ok(mixed !== null)
+  assert.equal(mixed.value.hasCodeDispatch, true)
+  // Session-location fallback: coordinate-less window seeds from Context id.
+  const sessSeed = turnChangesDefinition.buildLocationData({
+    id: String(turn),
+    matches: [
+      { event: dispatchEventNew, role: 'update', location: { kind: 'session' } },
+    ],
+  }, 'turn')
+  assert.ok(sessSeed !== null)
+  assert.equal(sessSeed.value.hasCodeDispatch, true)
 }
 
 // 17. undo-plan — the turn snapshot tells an overwrite from a creation: a
@@ -414,6 +445,13 @@ assert.equal(mergedTurn[1].path, 'g.ts')
 assert.equal(pathKey('./a.ts'), 'a.ts')
 assert.equal(pathKey('a\\b.ts'), 'a/b.ts')
 assert.equal(pathKey('a/b.ts'), 'a/b.ts')
+assert.equal(pathKey('a//b.ts'), 'a/b.ts')
+assert.equal(pathKey(''), '')
+assert.equal(pathKey(null), '')
+// basename handles both separators (single backslash, not doubled).
+assert.equal(basename('a\\b.ts'), 'b.ts')
+assert.equal(basename('a/b.ts'), 'b.ts')
+assert.equal(basename('plain.ts'), 'plain.ts')
 {
   const nativeSplit = [{ path: './f.ts', diffs: [{ path: './f.ts', oldText: 'a', newText: 'b' }] }]
   const dispatchSplit = [{ path: 'f.ts', diffs: [{ path: 'f.ts', oldText: 'b', newText: 'c' }] }]
@@ -441,6 +479,62 @@ assert.equal(pathKey('a/b.ts'), 'a/b.ts')
   assert.equal(gappedNos[0], undefined)
   assert.deepEqual(gappedNos.slice(1, 9), [23, 24, 25, 26, 26, 27, 28, 29])
   assert.equal(gappedNos[9], undefined)
+}
+
+// 19. Hardening guards — malformed wire never throws, oversized wire falls
+//     back to the generic row, arg parsing stays symmetric.
+{
+  // match with missing data declines instead of throwing.
+  assert.equal(turnChangesDefinition.match({ type: 'tool/call' }), null)
+  assert.equal(turnChangesDefinition.match({ type: 'tool/call', data: null }), null)
+  assert.equal(turnChangesDefinition.match({ type: 'turn/start', data: {} }), null)
+  assert.equal(turnChangesDefinition.match({ type: 'tool/result', data: {} }), null)
+  // Malformed tool/result inside a fold is skipped, not fatal.
+  const malformed = turnChangesDefinition.buildLocationData({
+    id: '9',
+    matches: [
+      { event: { type: 'turn/start', data: { turn: 9 }, seq: 1 }, role: 'start', location: { kind: 'turn', turn: { turn: 9 } } },
+      { event: { type: 'tool/result', data: {}, seq: 2 }, role: 'update', location: { kind: 'turn', turn: { turn: 9 } } },
+      { event: { type: 'tool/result', data: { message: { content: 'not-array', source: {} } }, seq: 3 }, role: 'update', location: { kind: 'turn', turn: { turn: 9 } } },
+    ],
+  }, 'turn')
+  assert.ok(malformed !== null)
+  assert.equal(malformed.value.changed.length, 0)
+  // Same callId settling twice counts once.
+  const callId = 'call_dup'
+  const dup = turnChangesDefinition.buildLocationData({
+    id: '10',
+    matches: [
+      { event: { type: 'turn/start', data: { turn: 10 }, seq: 1 }, role: 'start', location: { kind: 'turn', turn: { turn: 10 } } },
+      { event: { type: 'tool/call', data: { turn: 10, callId, name: 'edit', arguments: JSON.stringify({ file_path: 'd.ts', old_string: 'x', new_string: 'y' }) }, seq: 2 }, role: 'update', location: { kind: 'turn', turn: { turn: 10 } } },
+      { event: { type: 'tool/result', data: { turn: 10, message: { source: { callId }, content: [{ isError: false }] }, meta: { diffs: [{ path: 'd.ts', oldText: 'x', newText: 'y' }] } }, seq: 3 }, role: 'update', location: { kind: 'turn', turn: { turn: 10 } } },
+      { event: { type: 'tool/result', data: { turn: 10, message: { source: { callId }, content: [{ isError: false }] }, meta: { diffs: [{ path: 'd.ts', oldText: 'x', newText: 'y' }] } }, seq: 4 }, role: 'update', location: { kind: 'turn', turn: { turn: 10 } } },
+    ],
+  }, 'turn')
+  assert.ok(dup !== null)
+  assert.equal(dup.value.changed.length, 1)
+  // Window dropped the call head: meta-only settlement still counts.
+  const headless = turnChangesDefinition.buildLocationData({
+    id: '11',
+    matches: [
+      { event: { type: 'turn/start', data: { turn: 11 }, seq: 1 }, role: 'start', location: { kind: 'turn', turn: { turn: 11 } } },
+      { event: { type: 'tool/result', data: { turn: 11, message: { source: { callId: 'missing-head' }, content: [{ isError: false }] }, meta: { diffs: [{ path: 'h.ts', oldText: 'a', newText: 'b' }] } }, seq: 2 }, role: 'update', location: { kind: 'turn', turn: { turn: 11 } } },
+    ],
+  }, 'turn')
+  assert.ok(headless !== null)
+  assert.equal(headless.value.changed.length, 1)
+  assert.equal(headless.value.changed[0].path, 'h.ts')
+  // appliedHunks is the meta-only path the accumulator uses.
+  assert.deepEqual(appliedHunks({ diffs: [{ path: 'h.ts', oldText: 'a', newText: 'b' }] }), [{ path: 'h.ts', oldText: 'a', newText: 'b' }])
+  assert.equal(appliedHunks({}), null)
+  // narrowDiffs bounds: empty path, oversized list and sides fall back.
+  assert.equal(narrowDiffs([{ path: '', oldText: 'a', newText: 'b' }]), null)
+  assert.equal(narrowDiffs(new Array(MAX_WIRE_HUNKS + 1).fill({ path: 'f.ts', oldText: 'a', newText: 'b' })), null)
+  assert.equal(narrowDiffs([{ path: 'f.ts', oldText: 'a', newText: 'x'.repeat(MAX_HUNK_CHARS + 1) }]), null)
+  // parseArgs rejects arrays; edit accepts `path` like write does.
+  assert.equal(parseArgs('[]'), undefined)
+  assert.deepEqual(callTimeDiffs('edit', JSON.stringify({ path: 'e.ts', old_string: 'x', new_string: 'y' })), [{ path: 'e.ts', oldText: 'x', newText: 'y' }])
+  assert.equal(callTimeDiffs('edit', JSON.stringify({ file_path: '', old_string: 'x', new_string: 'y' })), null)
 }
 
 console.log('check-diff-align: all assertions pass (' + CONTEXT_LINES + '-line context)')

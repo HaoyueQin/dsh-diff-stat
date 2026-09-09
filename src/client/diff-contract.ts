@@ -2,13 +2,16 @@
  * Local toolview contract for dsh-diff-stat: the owner currency the stock
  * ui-tool rows supply at `tool.call.toolview` and the pure diff-card
  * derivation, declared locally so this plugin never imports the stock ui-tool
- * contract (one-way dependency). The `declare module` merge restores the slot
- * key this plugin registers into — the stock ui-tool bundle declares the same
- * row with the same shape, and interface merging accepts the duplicate
- * identical declaration. Adapted from dsh-diff-viewer's proven contract, with
- * one behavioural addition the stock model lacks: the call-time argument
- * fallback (the PTC dispatch path — `tool/code-dispatch*` on old kernels,
- * `tool/ptc-dispatch*` on new — whose calls carry no wire view).
+ * contract (one-way dependency). The `declare module` below is this plugin's
+ * own single-sided slot declaration (the stock ui-tool package is not a
+ * dependency, so no duplicate-merge proof exists here): it must be kept in
+ * step with the stock owner by re-verifying each new harness (last verified
+ * dsh-v0.1.5-alpha.1: `OpenFileOptions { readonly line?: number }` matches
+ * stock field-for-field; `loadImage` stays accepted-and-ignored). Adapted
+ * from dsh-diff-viewer's proven contract, with one behavioural addition the
+ * stock model lacks: the call-time argument fallback (the PTC dispatch
+ * path — `tool/code-dispatch*` on old kernels, `tool/ptc-dispatch*` on
+ * new — whose calls carry no wire view).
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -39,11 +42,12 @@ export interface ToolCallOwnerProps {
    */
   openFile: (path: string, options?: OpenFileOptions) => void
   /**
-   * Dual-kernel收容: harness 0.1.3-alpha.2 起 stock owner 新增必填 `loadImage`
-   * (图片槽 `tool.call.images` 的会话授权加载器,本插件不消费)。声明为可选
-   * `unknown` —— rc.1 无此字段时缺席合法,alpha.2 有此字段时忽略合法;
-   * `unknown` 避免引入新类型依赖,纯类型位不触达 client 打包纯度门。
-   * harness 0.1.5-alpha.1 保留该字段,语义不变,仍不消费。
+   * Dual-kernel handling: stock owner added `loadImage` in harness
+   * 0.1.3-alpha.2 (the session-authorized loader for `tool.call.images`,
+   * never consumed here) and keeps it in 0.1.5-alpha.1. Declared optional
+   * `unknown` — absent on rc.1, ignored on newer; `unknown` avoids a new
+   * type dependency so this pure-type slot stays inside the client bundle
+   * purity gate.
    */
   loadImage?: unknown
   /** Inspect this call in the trajectory view when available. */
@@ -83,16 +87,24 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
+/** Maximum hunks accepted from one wire `meta` (DoS bound; overflow falls back to the generic row). */
+export const MAX_WIRE_HUNKS = 1000
+/** Maximum chars per hunk side from wire `meta` (DoS bound). */
+export const MAX_HUNK_CHARS = 512 * 1024
+
 /** Narrow a wire `card:'diff'` view's `diffs` to well-formed hunks (same
- *  validation the stock diff-card model applies). */
+ *  validation the stock diff-card model applies, plus size bounds). */
 export function narrowDiffs(diffs: unknown): DiffHunk[] | null {
   if (!Array.isArray(diffs) || diffs.length === 0) return null
+  if (diffs.length > MAX_WIRE_HUNKS) return null
   for (const hunk of diffs) {
     if (hunk === null || typeof hunk !== 'object') return null
     const { path, oldText, newText } = hunk as Record<string, unknown>
-    if (typeof path !== 'string' || (oldText !== null && typeof oldText !== 'string') || typeof newText !== 'string') {
+    if (typeof path !== 'string' || path === '' || (oldText !== null && typeof oldText !== 'string') || typeof newText !== 'string') {
       return null
     }
+    if (typeof oldText === 'string' && oldText.length > MAX_HUNK_CHARS) return null
+    if (newText.length > MAX_HUNK_CHARS) return null
   }
   return diffs as DiffHunk[]
 }
@@ -101,7 +113,8 @@ export function narrowDiffs(diffs: unknown): DiffHunk[] | null {
 export function parseArgs(argsRaw: string): Record<string, unknown> | undefined {
   try {
     const parsed = JSON.parse(argsRaw) as unknown
-    return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : undefined
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+    return parsed as Record<string, unknown>
   } catch {
     return undefined
   }
@@ -123,6 +136,11 @@ export function contentLines(text: string): readonly string[] {
   if (text === '') return []
   const body = text.endsWith('\n') ? text.slice(0, -1) : text
   return body.split('\n')
+}
+
+/** Applied wire hunks without any argument fallback (window dropped the call head). */
+export function appliedHunks(meta: unknown): DiffHunk[] | null {
+  return narrowDiffs(metaDiffs(meta))
 }
 
 /** Added/removed line totals over hunks (badge material). */
@@ -202,14 +220,15 @@ export function callTimeDiffs(toolName: string, argsRaw: string): DiffHunk[] | n
     // Same key fallback rowModel applies ('path' vs 'file_path').
     const path = stringArg(args, 'file_path') ?? stringArg(args, 'path')
     const content = stringArg(args, 'content')
-    if (path === undefined || content === undefined) return null
+    if (path === undefined || path === '' || content === undefined) return null
     return [{ path, oldText: null, newText: content }]
   }
   if (toolName === 'edit') {
-    const path = stringArg(args, 'file_path')
+    // Accept `path` like `write` does (rowModel parity); empty paths map to nothing.
+    const path = stringArg(args, 'file_path') ?? stringArg(args, 'path')
     const oldString = stringArg(args, 'old_string')
     const newString = stringArg(args, 'new_string')
-    if (path === undefined || oldString === undefined || newString === undefined) return null
+    if (path === undefined || path === '' || oldString === undefined || newString === undefined) return null
     return [{ path, oldText: oldString || null, newText: newString }]
   }
   if (toolName === 'str_replace_editor') {
@@ -247,7 +266,7 @@ function callToolName(block: ToolCallBlock): string {
  * harness >= 0.1.2-rc.1 contract), making the wire meta the one applied diff
  * source this plugin reads.
  */
-function metaDiffs(meta: unknown): unknown {
+export function metaDiffs(meta: unknown): unknown {
   if (meta === null || typeof meta !== 'object') return null
   const diffs = (meta as Record<string, unknown>)['diffs']
   return diffs === undefined ? null : diffs

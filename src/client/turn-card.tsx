@@ -23,7 +23,7 @@ import { diffStats } from './diff-contract.ts'
 import { basename, type ChangedFile } from './turn-changes.ts'
 import { mergeChangedFiles } from './turn-merge.ts'
 import { extractDispatchFiles, type TurnJoinCache } from './turn-join.ts'
-import { prepareDiffWindow, type PreparedWindow } from './context-boost.ts'
+import { invalidateBoostCache, prepareDiffWindow, type PreparedWindow } from './context-boost.ts'
 import { NS } from './locales.ts'
 import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
@@ -98,9 +98,15 @@ export function TurnCard(props: TurnCardProps) {
   const snapshot = useChat === undefined ? undefined : useChat((s) => s)
   const joinCache = useRef<TurnJoinCache | null>(null)
   const dispatchFiles = useMemo(() => {
-    if (snapshot === undefined || turn === undefined) return EMPTY_FILES
+    if (snapshot === undefined || turn === undefined) {
+      joinCache.current = null
+      return EMPTY_FILES
+    }
     // The Chat target snapshot already IS the chat slice: `locations` and
     // `nodes` own the tool tree this Turn's run_code sub-calls live in.
+    // Intentional ref write during render: idempotent fingerprint update —
+    // a StrictMode double render re-reads the just-written cache and hits
+    // the fast path, returning the same files reference (no loop).
     const joined = extractDispatchFiles(snapshot.locations, snapshot.nodes, turn.turn, joinCache.current)
     joinCache.current = joined.next
     return joined.files
@@ -169,9 +175,11 @@ export function TurnCard(props: TurnCardProps) {
     })
   }, [])
 
-  /** Undo the whole turn: replay every recorded hunk chain in reverse on the host. */
+  /** Undo the whole turn: replay every recorded hunk chain in reverse on the host. Insert-only and pure-deletion hunks are safely refused per file (see README Undo). */
+  const undoBusy = useRef(false)
   const undoTurn = useCallback(() => {
-    if (undoState === 'busy') return
+    if (undoState === 'busy' || undoBusy.current) return
+    undoBusy.current = true
     setUndoState('busy')
     void (async () => {
       const result = await hostCall<{ ok: boolean }>('undo', {
@@ -186,9 +194,14 @@ export function TurnCard(props: TurnCardProps) {
           diffs: file.diffs.map(hunk => ({ oldText: hunk.oldText, newText: hunk.newText })),
         })),
       })
+      if (result !== null && result.ok) {
+        for (const file of allFiles) invalidateBoostCache(file.path, cwd)
+      } else {
+        undoBusy.current = false
+      }
       setUndoState(result !== null && result.ok ? 'done' : 'error')
     })()
-  }, [undoState, cwd, allFiles])
+  }, [undoState, cwd, allFiles, turn, sessionId])
 
   const toggleRevealed = useCallback((path: string) => {
     setRevealed(prev => {
@@ -223,6 +236,8 @@ export function TurnCard(props: TurnCardProps) {
   const onMenuSelect = useCallback((id: string, path: string) => {
     if (id === 'peek') togglePeeked(path)
     else if (id === 'open') openFile(path)
+    // Fire-and-forget by design: the host opener is sync-ack only and
+    // hostCall never rejects (fail-closed null), so no UI is lost here.
     else if (id === 'explorer') void hostCall('open-with', { cwd, path, target: 'explorer' })
     else if (id === 'vscode') void hostCall('open-with', { cwd, path, target: 'vscode' })
     else if (id === 'copy-abs') void writeClipboard(path)

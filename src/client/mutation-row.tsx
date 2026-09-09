@@ -26,7 +26,7 @@ import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import rowCss from './tool-row.module.css'
 import badgeCss from './badge.module.css'
 import { DiffWindow } from './diff-window.tsx'
-import { diffCardModel, diffStats, parseArgs } from './diff-contract.ts'
+import { diffCardModel, diffStats, parseArgs, type OpenFileOptions } from './diff-contract.ts'
 import { prepareDiffWindow, type PreparedWindow } from './context-boost.ts'
 
 /** Row state semantic; colors self-supplied via StateDot. */
@@ -70,10 +70,10 @@ function rowModel(toolName: string, block: ToolCallBlock, cwd?: string, home?: s
     : block.error?.code === 'interrupted' ? 'stopped'
       : block.isError ? 'error' : 'ok'
   const parsed = parseArgs(argsRaw)
-  const path = parsed !== undefined
-    ? (typeof parsed['file_path'] === 'string' && parsed['file_path'] !== '' ? parsed['file_path']
-      : typeof parsed['path'] === 'string' ? parsed['path'] : undefined)
-    : undefined
+  const filePath = parsed !== undefined && typeof parsed['file_path'] === 'string' ? parsed['file_path'] : undefined
+  const altPath = parsed !== undefined && typeof parsed['path'] === 'string' ? parsed['path'] : undefined
+  const path = filePath !== undefined && filePath !== '' ? filePath
+    : altPath !== undefined && altPath !== '' ? altPath : undefined
   // Workspace-rooted paths display relative to the session cwd, then leftover
   // POSIX home paths abbreviate to `~` — the stock toolRowModel pipeline
   // (relativizeToCwd → abbreviateHomePath).
@@ -89,7 +89,7 @@ function rowModel(toolName: string, block: ToolCallBlock, cwd?: string, home?: s
   const output = done ? (resultText(block) || null) : null
   return {
     variant,
-    title: variant === 'edit' ? 'Edit' : 'Write',
+    title: variant === 'write' ? 'Write' : toolName === 'str_replace_editor' ? 'StrReplace' : 'Edit',
     summary,
     filePath: path,
     body: argsRaw === '' ? null : (parsed !== undefined ? JSON.stringify(parsed, null, 2) : argsRaw),
@@ -127,8 +127,8 @@ export interface MutationRowProps {
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
   /** Mirrors stock `OpenFileOptions`: new kernels may pass `{ line }`; this row calls path-only. */
-  openFile: (path: string, options?: { readonly line?: number }) => void
-  /** Dual-kernel收容(见 diff-contract ToolCallOwnerProps):alpha.2 新增,0.1.5-alpha.1 保留,本行不消费。 */
+  openFile: (path: string, options?: OpenFileOptions) => void
+  /** Dual-kernel handling (see diff-contract ToolCallOwnerProps): added in alpha.2, kept in 0.1.5-alpha.1, never consumed here. */
   loadImage?: unknown
   inspect?: (() => void) | undefined
 }
@@ -194,7 +194,10 @@ export function MutationRow({ toolName, block, cwd, home, openFile, inspect }: M
     if (model.filePath !== undefined) openFile(model.filePath)
   }
   const fileLinkKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.stopPropagation()
+      event.preventDefault()
+    }
   }
   return (
     <div className={rowCss.root} data-variant={model.variant} data-tool={toolName} data-state={model.state} data-diff-stat-row="">

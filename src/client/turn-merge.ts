@@ -19,11 +19,14 @@ export const EMPTY_CHANGED_FILES: readonly ChangedFile[] = []
  * The merge/claim key of one path: a "./"-prefixed path, a separator-mixed
  * path and its clean form are the same file and must collapse into one row,
  * while the ORIGINAL path string stays as the display value (first-seen
- * wins). Normalizes the './' prefix and separator direction only —
- * absolute/relative mixing is left to the caller's fence.
+ * wins). Normalizes the './' prefix, separator direction and repeated
+ * slashes — absolute/relative mixing is left to the caller's fence.
+ * Comparison stays case-sensitive (Linux-safe); Windows case variants may
+ * show as two rows rather than risk merging distinct files.
  */
 export function pathKey(path: string): string {
-  return path.replace(/[\\/]/g, '/').replace(/^\.\//, '')
+  if (typeof path !== 'string') return ''
+  return path.replace(/[\\/]/g, '/').replace(/\/\/+/g, '/').replace(/^\.\//, '')
 }
 
 /**
@@ -43,8 +46,11 @@ export function changesForClosing(
   if (data === undefined) return []
   const files: ChangedFile[] = []
   const byPath = new Map<string, DiffHunk[]>()
+  if (!Array.isArray(data.changed)) return []
   for (const entry of data.changed) {
-    if (entry.seq > seq) continue
+    if (entry === null || typeof entry !== 'object') continue
+    if (typeof entry.seq !== 'number' || entry.seq > seq) continue
+    if (typeof entry.path !== 'string' || entry.path === '' || !Array.isArray(entry.diffs)) continue
     const key = pathKey(entry.path)
     const existing = byPath.get(key)
     if (existing === undefined) {
@@ -63,7 +69,10 @@ export function changesForClosing(
  * changed files when any entry survives the closing-seq filter; a stable
  * empty match when the turn ran run_code (its edit/write sub-calls are joined
  * from the chat tool tree later, and an empty claim must still mount the
- * card); null when there is nothing to show.
+ * card); null when there is nothing to show. Known limit: a pure-compute
+ * run_code turn with no file mutations still claims (first-wins) and renders
+ * null, hiding stock turn-tail chips for that turn — accepted because the
+ * select cannot see the join result; pure-compute turns are rare.
  * @param data - the engine-published diff-stat data for one Turn.
  * @param seq - the closing Assistant seq; later settlements are excluded.
  */
@@ -77,7 +86,11 @@ export function claimFor(data: TurnChangesTurnData | undefined, seq: number): re
  * Collect the successful edit/write dispatch sub-calls of one root block into
  * per-file entries appended in tree order (same path merges its hunks).
  * Settled blocks only: a still-running sub-call has no settled outcome to
- * count. The callId set dedupes replayed or re-folded trees.
+ * count. The callId set dedupes replayed or re-folded trees. Assumes PTC
+ * sub-calls never also emit native `tool/call`+`tool/result` (true on every
+ * verified kernel: the dispatch bridge is log-only); if a future kernel
+ * dual-emits, the same file would appear in both native and dispatch halves
+ * and mergeChangedFiles would append both — re-check per new rc.
  * @param root - the stock tool tree's root block (running or settled).
  * @param into - the list to append per-file entries to.
  * @returns the same list, for call-site convenience.

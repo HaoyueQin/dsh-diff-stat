@@ -27,6 +27,9 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): P
 /**
  * POST one action to the fenced API.
  * @returns the parsed payload, or null when the host half is absent/unreachable.
+ * Fail-closed by design: every HTTP status (404 unknown action, 413 body cap,
+ * 500) maps to null and the dependent UI hides or reports error — never a
+ * partial result.
  */
 export async function hostCall<T>(action: string, body: unknown): Promise<T | null> {
   try {

@@ -19,7 +19,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/t/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/graphs/commit-activity)
 [![Last commit](https://img.shields.io/github/last-commit/HaoyueQin/dsh-diff-stat?style=flat-square)](https://github.com/HaoyueQin/dsh-diff-stat/commits)
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 插件，将智能体的文件变更可视化：变更工具行内联 **+N −M** 徽标、轮末文件变更汇总卡、点击展开对齐后的完整 diff。原生 `edit`/`write` 调用、极简预设的 `str_replace_editor`、PTC dispatch 子调用全链路覆盖。不依赖 git，不依赖任何第三方插件。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 插件，将智能体的文件变更可视化：变更工具行内联 **+N −M** 徽标、轮末文件变更汇总卡、点击展开对齐后的完整 diff。原生 `edit`/`write` 调用、按需启用的 `str_replace_editor`、PTC dispatch 子调用全链路覆盖。不依赖 git，不依赖任何第三方插件。
 
 <p align="center">
   <img src="docs/demo-zh.svg" alt="demo" width="720">
@@ -27,14 +27,14 @@
 
 ## 功能
 
-- **内核目标：harness ≥ 0.1.2-rc.1** — 单一构建，同时覆盖 rc 产线、`0.1.3-alpha.2` 与 `0.1.5-alpha.1`：`uiConversation` 事件注册表、`tool.call.toolview` keyed 槽与 `conversation.chat.turnTail` 链均为 `0.1.2-rc.1+` 形态，diff hunk 读自工具持久化的 wire `meta`。PTC dispatch 双词汇收容（旧内核 `tool/code-dispatch(-start)`，新内核 `tool/ptc-dispatch(-start)`）。harness `0.1.1-rc.x` 及更早（含 `0.1.2-alpha.5` 之前的 alpha 线旧阶段）**不在**本版本支持范围——请在这些内核上安装 `dsh-diff-stat@0.1.6`（或更早覆盖它们的旧版本）
+- **内核目标：harness ≥ 0.1.2-rc.1** — 单一构建，同时覆盖 rc 产线、`0.1.3-alpha.2` 与 `0.1.5-alpha.1`：`uiConversation` 事件注册表、`tool.call.toolview` keyed 槽与 `conversation.chat.turnTail` 链均为 `0.1.2-rc.1+` 形态，diff hunk 读自工具持久化的 wire `meta`。PTC dispatch 双词汇兼容（旧内核 `tool/code-dispatch(-start)`，新内核 `tool/ptc-dispatch(-start)`）。harness `0.1.1-rc.x` 及更早（含 `0.1.2-alpha.5` 之前的 alpha 线旧阶段）**不在**本版本支持范围——请在这些内核上安装 `dsh-diff-stat@0.1.6`（或更早覆盖它们的旧版本）
 - **行内 +N −M 徽标** — 接管 `edit`、`write` 与 `str_replace_editor` 的 stock 变更行（`str_replace_editor` 自 harness `0.1.3-alpha.2` 起为按需启用，默认关闭；keyed 低优先阴影，卸载自动还原）。计数是真实变更行数——与 diff 渲染共用同一趟 LCS：运行中按参数预估，结算后取精确值
 - **对齐 diff 窗口** — 点击行展开限高滚动的 unified 视图。两侧先做行级 LCS 对齐：共同行渲染为变更处 ±3 行上下文，更远的未变更区间折叠为 ⋯；页脚统计与正文渲染完全同源
 - **行号槽** — 文件视图按 1..N 编号；diff 窗口把每个 hunk 钉到当前文件中的真实位置（一次缓存围栏读取、唯一性校验）：删除行读旧侧号码、上下文/新增行读新侧号码，变更行带左缘色条；无法定位的 hunk（host 缺席、文件已再改动、超预算）退回窗口内 1..N 相对编号，行号槽始终渲染
 - **轮末汇总卡** — 每轮消息流尾部折叠条「N files changed +X −Y」；逐文件行含类型图标、目录、±行数、审查、打开 ▾ 与撤销，同文件多次编辑按结算顺序合并累计
-- **PTC dispatch 全链路** — dispatch 子调用在 wire 上没有 diff 视图：行内回退到参数推导 diff，轮末卡从 stock 会话工具树 join 出其文件，纯 PTC 轮同样有汇总卡；`subCallId` 去重防止重放双计
+- **PTC dispatch 全链路** — dispatch 子调用在 wire 上没有 diff 视图：行内回退到参数推导 diff，轮末卡从 stock 会话工具树 join 出其文件，纯 PTC 轮同样有汇总卡；`callId` 去重防止重放双计
 - **文件上下文增强** — 参数推导的裸片段在展开时获得至多 ±3 行真实文件上下文：增强器经 host 围栏 API 读取文件、定位片段的 after 形态并重建 hunk（尽力而为；无法定位的片段保持原样）
-- **撤销** — 一键把本轮文件恢复到轮前状态：hunk 链倒序唯一性回剥、轮首快照证明文件为「本轮新建」（而非覆盖）后才删除、文件漂移在写入前拒绝、原子提交
+- **撤销** — 一键把本轮文件恢复到轮前状态：hunk 链倒序唯一性回剥、轮首快照证明文件为「本轮新建」（而非覆盖）后才删除、文件漂移在写入前拒绝、原子提交。纯 insert 与纯删除 hunk 按文件安全拒绝（无可回剥内容）
 - **内嵌查看与打开系** — 点「打开」在行下方展开限高文件预览；「▾」菜单保留系统打开、资源管理器定位、VS Code 与绝对/相对路径复制
 - **毛玻璃（可选）** — 安装 [deepseek-harness-background](https://github.com/HaoyueQin/deepseek-harness-background) 后，本插件全部表面并入其共享玻璃配方；未安装时保持 stock 不透明外观——优雅降级、零新增第三方运行时（peer 模块由 harness 提供）
 - **中英文** — 文案跟随 Web 界面语言（locale 服务）
@@ -49,8 +49,8 @@
 
 ## 机制
 
-- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行（`str_replace_editor` 自 harness `0.1.3-alpha.2` 起为按需启用）；diff 数据按权威链提取：工具持久化的 wire meta（含 ±3 行文件上下文），PTC 子调用回退到调用时参数推导——窗口截断丢掉调用头时仍可从 result meta 渲染
-- **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start`、`tool/call`、`tool/result(append)`、`tool/code-dispatch` / `tool/ptc-dispatch` 及 `-start` 证据）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染——结构遵循官方 `ui-deliverables` 模式。dispatch 文件从 stock 会话工具树 join：其 `tool-call` 节点已把每个 dispatch 按 rootCallId 折叠进根调用的 `subCalls`
+- **徽标与 diff**：注册进 `tool.call.toolview` keyed 槽的 `edit`/`write`/`str_replace_editor` 键，priority −1 阴影 shipped 行（`str_replace_editor` 自 harness `0.1.3-alpha.2` 起为按需启用）；行 diff 按权威链提取：工具持久化的 wire meta（含 ±3 行文件上下文），PTC 子调用回退到调用时参数推导——窗口截断丢掉调用头时仍可从 result meta 渲染。轮末聚合器同样统计 meta-only 结算
+- **轮末汇总卡**：`ConversationNodeDefinition` 聚合器（`turn/start`、`tool/call`、`tool/result(append)`、`tool/code-dispatch` / `tool/ptc-dispatch` 及 `-start` 证据）发布 Turn 数据，`conversation.chat.turnTail` 链认领渲染——结构遵循官方 `ui-deliverables` 模式。dispatch 文件从 stock 会话工具树 join：其 `tool-call` 节点已把每个 dispatch 按 rootCallId 折叠进根调用的 `subCalls`。纯计算 `run_code` 轮（无文件变更）仍会认领后渲染空——已接受，select 看不到 join 结果。冷打开的纯 PTC 轮可能缺卡（dispatch 记录无 turn 坐标，best-effort）
 - **上下文增强**：参数来源的 hunk 在构造时按对象身份标记；展开时增强器经围栏 API 读取文件（LRU 缓存）、定位片段的 after 形态并以共享行重建 hunk，无法定位的原样渲染
 - **host 半**（可选）：同源前缀路由提供围栏 API（files.read、每轮快照 capture、undo、open-with）——realpath 包含性解析前后双查、符号链接拒绝、UTF-8 回环校验、显示读取 512 KiB 上限并带截断标记、undo 32 MiB 门限、原子写；host 半缺席时相关操作自动隐藏
 - **毛玻璃桥**（可选）：零依赖消费 background 插件的 `window.__DSH_BACKGROUND_GLASS__` 注册表——常驻订阅其 ready 事件（覆盖两种到达顺序与热重载）；桥不存在时普通界面原样保留
@@ -77,14 +77,15 @@ dsh plugin --profile web remove dsh-diff-stat
 ## 开发
 
 ```sh
-pnpm install        # devDependencies；prepare 会自动构建 lib/
+pnpm install        # devDependencies；prepare 会自动构建 lib/（运行时需 Node >= 22.18）
 pnpm build          # host 半 → lib/index.js + 浏览器半 → lib/client.js（一次 tsdown）
 pnpm typecheck      # 双端 tsc
 pnpm check:align    # 对齐引擎与数据模型断言（需 Node >= 23.6）
+pnpm check:join     # 工具树 join 指纹断言（需 Node >= 23.6）
 ```
 
 > **内核兼容性：** 本构建面向 harness `>= 0.1.2-rc.1`（单一构建覆盖 rc
-> 产线与 `0.1.3-alpha.2`）。更旧的内核（`0.1.1-rc.x`、`0.1.2-alpha.5`
+> 产线、`0.1.3-alpha.2` 与 `0.1.5-alpha.1`）。更旧的内核（`0.1.1-rc.x`、`0.1.2-alpha.5`
 > 之前的 alpha 线）需安装旧版本插件 —— 请使用 `dsh-diff-stat@0.1.6`。
 
 ## Activity

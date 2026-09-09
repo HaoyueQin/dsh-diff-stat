@@ -12,13 +12,19 @@
  * `tool/code-dispatch(-start)`, harness >= 0.1.5-alpha.1 as
  * `tool/ptc-dispatch(-start)` (bad4254d71, with a v2→v3 identity-preserving
  * migration). This accumulator accepts both, so one build covers old
- * sessions/history and new live turns.
+ * sessions/history and new live turns. `-start` records carry no file args
+ * and contribute evidence only (never hunks).
+ *
+ * Cold-open limit (best-effort): a dispatch record whose rootCallId was
+ * never learned from its root `tool/call` cannot be routed and stays outside
+ * every Turn context, so a pure-PTC turn opened cold from its tail page may
+ * miss its card while native rows (which carry turn coordinates) still show.
  */
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { ConversationMatch, ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
-import { mutationHunks } from './diff-contract.ts'
+import { appliedHunks, mutationHunks } from './diff-contract.ts'
 import { claimFor } from './turn-merge.ts'
 
 /** One settled mutation's file and hunks, in settlement order. */
@@ -59,6 +65,8 @@ interface TurnChangesState extends TurnChangesTurnData {
     readonly name: string
     readonly argsRaw: string
   }>
+  /** Settled callIds already counted: replays and window re-folds must not double-count. */
+  readonly settled: ReadonlySet<string>
 }
 
 /**
@@ -71,7 +79,12 @@ function settledHunks(
   call: { readonly name: string; readonly argsRaw: string } | undefined,
   meta: unknown,
 ): DiffHunk[] | null {
-  if (call === undefined) return null
+  if (call === undefined) {
+    // Window dropped the call head: applied wire hunks still render (the row
+    // contract), so the accumulator counts them too. Without a call name the
+    // argument fallback cannot run, hence meta-only here.
+    return appliedHunks(meta)
+  }
   return mutationHunks(call.name, call.argsRaw, meta)
 }
 
@@ -88,7 +101,7 @@ export function basename(path: string): string {
 /**
  * Loose event view for the wire-only PTC dispatch record.
  *
- * Dual-vocabulary收容: harness <= 0.1.3-alpha.2 emits
+ * Dual-vocabulary handling: harness <= 0.1.3-alpha.2 emits
  * `tool/code-dispatch` / `tool/code-dispatch-start`, harness >= 0.1.5-alpha.1
  * emits `tool/ptc-dispatch` / `tool/ptc-dispatch-start` (bad4254d71). Both
  * start and settling records are evidence only (see applyUpdateState); the
@@ -156,20 +169,25 @@ export function selectChangedFiles(owner: TurnTailOwnerProps): readonly ChangedF
 /** The state a matched turn/start begins with. */
 function startState(match: ConversationMatch): TurnChangesState {
   if (match.event.type !== 'turn/start') throw new Error('diff-stat changes start requires turn/start')
-  return { turn: match.event.data.turn, calls: new Map(), changed: [], hasCodeDispatch: false }
+  const turn = (match.event.data as { turn?: unknown } | null | undefined)?.turn
+  if (typeof turn !== 'number' || !Number.isInteger(turn)) throw new Error('diff-stat changes start requires numeric turn')
+  return { turn, calls: new Map(), settled: new Set(), changed: [], hasCodeDispatch: false }
 }
 
 /** One update folded into the state — the engine's update path and the
  *  window fold below share this single function, so both derive identical data. */
 function applyUpdateState(state: TurnChangesState, match: ConversationMatch): TurnChangesState {
   if (match.event.type === 'tool/call') {
-    if (typeof match.event.data.callId !== 'string' || match.event.data.callId === '') {
+    const data = (match.event.data ?? {}) as Record<string, unknown>
+    if (typeof data['callId'] !== 'string' || data['callId'] === '') {
       return state
     }
+    // Per-call Map copy keeps states immutable; turns rarely exceed hundreds
+    // of calls, so O(n^2) worst case is accepted over shared-mutable risk.
     const calls = new Map(state.calls)
-    calls.set(match.event.data.callId, {
-      name: String(match.event.data.name ?? ''),
-      argsRaw: String(match.event.data.arguments ?? ''),
+    calls.set(data['callId'] as string, {
+      name: String(data['name'] ?? ''),
+      argsRaw: String(data['arguments'] ?? ''),
     })
     return {
       ...state,
@@ -178,20 +196,28 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
     }
   }
   if (match.event.type === 'tool/result') {
-    const result = match.event.data.message.content[0]
-    if (result === undefined || result === null) return state
-    if (result.isError === true) return state
-    const callId = match.event.data.message.source.callId
+    const data = (match.event.data ?? {}) as Record<string, unknown>
+    const message = (data['message'] ?? {}) as Record<string, unknown>
+    const content = message['content']
+    const first = Array.isArray(content) ? content[0] : undefined
+    if (first === undefined || first === null) return state
+    if ((first as Record<string, unknown>)['isError'] === true) return state
+    const source = (message['source'] ?? {}) as Record<string, unknown>
+    const callId = source['callId']
     if (typeof callId !== 'string' || callId === '') return state
-    const call = state.calls.get(callId)
-    const hunks = settledHunks(call, match.event.data.meta)
-    if (hunks === null || hunks.length === 0) return state
     // Same call settling twice keeps its first settlement; a later edit to
-    // the same file is a distinct call and appends naturally.
+    // the same file is a distinct callId and appends naturally.
+    if (state.settled.has(callId)) return state
+    const call = state.calls.get(callId)
+    const hunks = settledHunks(call, data['meta'])
+    if (hunks === null || hunks.length === 0) return state
     const path = hunks[0]?.path
-    if (path === undefined) return state
+    if (typeof path !== 'string' || path === '') return state
+    const settled = new Set(state.settled)
+    settled.add(callId)
     return {
       ...state,
+      settled,
       changed: [...state.changed, { seq: match.event.seq, path, diffs: hunks }],
     }
   }
@@ -246,7 +272,7 @@ function foldMatches(matches: readonly ConversationMatch[], contextTurn?: number
       // through exactly when it is needed most.
       const turn = matchTurn(match) ?? contextTurn
       if (turn === undefined) continue
-      state = { turn, calls: new Map(), changed: [], hasCodeDispatch: false }
+      state = { turn, calls: new Map(), settled: new Set(), changed: [], hasCodeDispatch: false }
     }
     state = applyUpdateState(state, match)
   }
@@ -260,29 +286,34 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
   // turnTail select reads.
   kind: 'diff-stat',
   match: (event) => {
-    if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
+    const data = (event.data ?? {}) as Record<string, unknown>
+    if (event.type === 'turn/start') {
+      return typeof data['turn'] === 'number' ? { id: String(data['turn']), role: 'start' } : null
+    }
     if (event.type === 'tool/call') {
       // Learn rootCallId → Turn, the coordinate wire PTC dispatch records
       // lack: a pagination boundary can drop the root call's tool/call from
       // the window while its dispatch records survive it, and the stock
       // tool-call fallbackState still renders the sub-rows from those — the
       // accumulator must route them to the same Turn or the card alone
-      // disappears.
-      const learnedTurn = event.data.turn
-      if (typeof learnedTurn === 'number' && event.data.callId) {
-        if (rootCallTurn.size >= ROOT_CALL_TURN_LIMIT) {
+      // disappears. Cold-open without ever seeing the root call stays
+      // unrouted (best-effort, see header).
+      const learnedTurn = data['turn']
+      const callId = data['callId']
+      if (typeof learnedTurn === 'number' && typeof callId === 'string' && callId !== '') {
+        if (!rootCallTurn.has(callId) && rootCallTurn.size >= ROOT_CALL_TURN_LIMIT) {
           // Evict the oldest entry only: clearing everything would drop every
           // live root mapping in a long session and disable dispatch routing
           // until the next tool/call arrives.
           const oldest = rootCallTurn.keys().next().value
           if (oldest !== undefined) rootCallTurn.delete(oldest)
         }
-        rootCallTurn.set(String(event.data.callId), learnedTurn)
+        rootCallTurn.set(String(callId), learnedTurn)
       }
-      return { id: String(event.data.turn), role: 'update' }
+      return typeof data['turn'] === 'number' ? { id: String(data['turn']), role: 'update' } : null
     }
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
-      return { id: String(event.data.turn), role: 'update' }
+      return typeof data['turn'] === 'number' ? { id: String(data['turn']), role: 'update' } : null
     }
     const dispatch = dispatchData(event)
     if (dispatch !== null) {

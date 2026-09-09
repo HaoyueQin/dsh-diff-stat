@@ -179,7 +179,13 @@ async function undoFile(cwd: string, session: string, turn: number | undefined, 
     if (target.size > UNDO_TEXT_LIMIT) {
       return { path: file.path, ok: false, error: 'file too large to undo safely (' + target.size + ' bytes)' }
     }
-    const resolvedText = (await readWhole(target)).text
+    const resolved = await readWhole(target)
+    // Re-check after the read: the size gate above ran at lstat time and a
+    // concurrent grow could have bypassed the 32 MiB bound (~3x resident).
+    if (resolved.bytes.length > UNDO_TEXT_LIMIT) {
+      return { path: file.path, ok: false, error: 'file too large to undo safely (' + resolved.bytes.length + ' bytes)' }
+    }
+    const resolvedText = resolved.text
     let text = resolvedText
     let created = false
     for (let i = file.diffs.length - 1; i >= 0; i -= 1) {
@@ -209,13 +215,21 @@ async function undoFile(cwd: string, session: string, turn: number | undefined, 
       }
     }
     // Re-verify before the destructive step: the file may have been swapped
-    // to a link since the read-time check.
+    // to a link since the read-time check (microsecond TOCTOU window remains
+    // without O_NOFOLLOW; threat model is the same-origin page, accepted).
     await assertSamePath(target.candidate, target.filename)
     if (created) {
       await unlink(target.filename)
       return { path: file.path, ok: true, deleted: true }
     }
-    await writeFileAtomic(target.filename, text, { mode: target.mode })
+    // Refresh mode: the lstat-time mode may be stale after a replace.
+    let mode = target.mode
+    try {
+      mode = (await lstat(target.filename)).mode & 0o777
+    } catch {
+      return { path: file.path, ok: false, error: 'file changed while being accessed (stat)' }
+    }
+    await writeFileAtomic(target.filename, text, { mode })
     return { path: file.path, ok: true }
   } catch (error) {
     return { path: file.path, ok: false, error: String((error as Error).message ?? error) }
@@ -235,7 +249,11 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
         // expands %VAR% inside quotes — a name like report%TEMP%.md would
         // silently open something else. NTFS forbids quotes in names anyway;
         // reject both characters up front on the value that reaches the line.
-        if (/["%]/.test(resolvedTarget.filename)) {
+        // &|; and friends stay literal inside double quotes (no separator
+        // role) and filenames like R&D.md must keep working, so the minimal
+        // quote-breakout + expansion blacklist is intentional, not an
+        // allowlist omission. Delayed `!` expansion is off for direct spawn.
+        if (/["%\r\n]/.test(resolvedTarget.filename)) {
           rejectPromise(new Error('path contains a shell-special character (quote or %)'))
           return
         }
@@ -311,7 +329,9 @@ const turnSnapshots = new Map<string, TurnSnapshot>()
 const pendingSnapshots = new Map<string, Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }>>()
 
 function snapshotKey(cwd: string, session: string, turn: number): string {
-  return cwd + '\0' + session + '\0' + turn
+  // Normalize trailing slashes so one workspace cited two ways shares a slot.
+  const root = cwd.replace(/[/\\]+$/, '')
+  return root + '\0' + session + '\0' + turn
 }
 
 /** The probe semantic undo needs: undefined turn → undefined answers. */
@@ -344,10 +364,12 @@ async function captureSnapshotInner(cwd: string, session: string, turn: unknown)
   if (turnSnapshots.has(existingKey)) return { ok: true, files: turnSnapshots.get(existingKey)!.files.size, truncated: turnSnapshots.get(existingKey)!.truncated }
   const files = new Set<string>()
   let truncated = false
-  // Full tree, no depth cap: node_modules/.git are skipped and the file cap is
-  // the only bound — a path omitted by ANY depth limit would classify as a
-  // create and be deleted, which is the one wrong direction this guard must
-  // never take. Truncation is recorded and downgrades absence to unverified.
+  // Full tree, no depth cap by design: node_modules/.git are skipped and the
+  // file cap is the only bound — a path omitted by ANY depth limit would
+  // classify as a create and be deleted, which is the one wrong direction
+  // this guard must never take. Truncation is recorded and downgrades absence
+  // to unverified. Deep nesting costs I/O time only (recursion is async,
+  // no stack growth per level beyond the promise chain).
   const walk = async (dir: string): Promise<void> => {
     if (truncated) return
     let entries
@@ -395,7 +417,11 @@ async function captureSnapshotInner(cwd: string, session: string, turn: unknown)
  * walk is a full-tree readdir and parallel identical walks help nobody.
  */
 async function captureSnapshot(cwd: string, session: string, turn: unknown): Promise<{ ok: boolean; files?: number; truncated?: boolean; error?: string }> {
-  const pendingKey = snapshotKey(cwd, String(session ?? ''), typeof turn === 'number' ? turn : NaN)
+  // Validate before keying: NaN turns would otherwise share one pending slot.
+  if (typeof turn !== 'number' || !Number.isInteger(turn) || turn < 1) {
+    return captureSnapshotInner(cwd, session, turn)
+  }
+  const pendingKey = snapshotKey(cwd, String(session ?? ''), turn)
   const inFlight = pendingSnapshots.get(pendingKey)
   if (inFlight !== undefined) return inFlight
   const run = captureSnapshotInner(cwd, session, turn).finally(() => {
@@ -409,6 +435,7 @@ async function captureSnapshot(cwd: string, session: string, turn: unknown): Pro
 function readJsonBody(req: IncomingMessage, res: ServerResponse): Promise<Record<string, unknown>> {
   return new Promise((resolvePromise, rejectPromise) => {
     const chunks: Buffer[] = []
+    // Buffer.length is bytes (not chars), so BODY_CAP bounds memory exactly.
     let size = 0
     req.on('data', (chunk: Buffer) => {
       size += chunk.length
@@ -426,7 +453,10 @@ function readJsonBody(req: IncomingMessage, res: ServerResponse): Promise<Record
     req.on('end', () => {
       try {
         const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        if (parsed === null || typeof parsed !== 'object') rejectPromise(new Error('body must be a JSON object'))
+        // Arrays are objects too; the handlers need keyed bodies only.
+        // No request timeout here: the host is local-loopback and BODY_CAP
+        // bounds memory; slowloris against a local prefix route is out of scope.
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) rejectPromise(new Error('body must be a JSON object'))
         else resolvePromise(parsed as Record<string, unknown>)
       } catch (error) {
         rejectPromise(new Error('invalid JSON body: ' + String((error as Error).message ?? error)))
@@ -487,8 +517,14 @@ export function apply(ctx: Context): void {
           const target = await resolveTarget(String(body['cwd'] ?? ''), String(body['path'] ?? ''))
           if (target.size > READ_CAP) {
             // A giant file is never loaded whole: only its head (plus the
-            // mid-sequence tail guard) enters memory.
+            // mid-sequence tail guard) enters memory. Check the head for NUL
+            // so large binaries degrade to an explicit note like small ones.
             const head = await readTargetText(target, READ_CAP)
+            const headBytes = Buffer.from(head.text, 'utf8')
+            if (headBytes.includes(0)) {
+              respond(res, 200, { kind: 'binary', truncated: true, size: head.size })
+              return
+            }
             respond(res, 200, { kind: 'text', content: head.text, truncated: true, size: head.size })
             return
           }
@@ -510,24 +546,30 @@ export function apply(ctx: Context): void {
         }
         if (action === 'undo') {
           const files = body['files']
-          if (!Array.isArray(files)) {
-            respond(res, 200, { ok: false, error: 'files must be an array', results: [] })
+          if (!Array.isArray(files) || files.length === 0) {
+            respond(res, 200, { ok: false, error: files !== undefined && Array.isArray(files) && files.length === 0 ? 'no files to undo' : 'files must be a non-empty array', results: [] })
             return
           }
           const turn = body['turn']
           const turnNo = typeof turn === 'number' && Number.isInteger(turn) && turn >= 1 ? turn : undefined
           const session = String(body['session'] ?? '')
           const results = []
-          for (const file of files as UndoFile[]) {
-            results.push(await undoFile(String(body['cwd'] ?? ''), session, turnNo, {
-              path: String(file.path ?? ''),
-              diffs: Array.isArray(file.diffs)
-                ? file.diffs.map(hunk => ({
-                  oldText: hunk === null || typeof hunk !== 'object' ? null : (hunk as UndoHunk).oldText ?? null,
-                  newText: hunk === null || typeof hunk !== 'object' ? '' : String((hunk as UndoHunk).newText ?? ''),
-                }))
-                : [],
-            }))
+          for (const file of files as Array<UndoFile | null | undefined>) {
+            // Per-file guard: one malformed entry must not drop the rest.
+            try {
+              if (file === null || typeof file !== 'object') throw new Error('malformed file entry')
+              results.push(await undoFile(String(body['cwd'] ?? ''), session, turnNo, {
+                path: String(file.path ?? ''),
+                diffs: Array.isArray(file.diffs)
+                  ? file.diffs.map(hunk => ({
+                    oldText: hunk === null || typeof hunk !== 'object' ? null : (hunk as UndoHunk).oldText ?? null,
+                    newText: hunk === null || typeof hunk !== 'object' ? '' : String((hunk as UndoHunk).newText ?? ''),
+                  }))
+                  : [],
+              }))
+            } catch (error) {
+              results.push({ path: '', ok: false as const, error: String((error as Error).message ?? error) })
+            }
           }
           respond(res, 200, { ok: results.every(r => r.ok), results })
           return

@@ -19,22 +19,43 @@ export const BOOST_CONTEXT_LINES = 3
 
 /** LRU cap of the file-content cache (one expanded file ≈ one entry). */
 const CACHE_CAP = 16
+/** Client-side content cap: a larger host reply is treated as unavailable (display only). */
+export const BOOST_MAX_CHARS = 1024 * 1024
+/** Cache entry TTL: bounds how long a stale post-edit read can mislead the grey context. */
+const CACHE_TTL_MS = 30_000
 
-/** Module-side content cache: cwd-fenced path → full text. */
-const cache = new Map<string, string>()
+/** Module-side content cache: normalized cwd-fenced path → text with timestamp. */
+const cache = new Map<string, { text: string; at: number }>()
+
+/** Normalize the cache key so `./a.ts` and `a.ts` share one entry. */
+function cacheKey(path: string, cwd: string | undefined): string {
+  const norm = path.replace(/[\\/]/g, '/').replace(/\/\/+/g, '/').replace(/^\.\//, '')
+  return (cwd ?? '') + '\0' + norm
+}
+
+/** Drop one cached file (call after a successful undo of that path). */
+export function invalidateBoostCache(path: string, cwd: string | undefined): void {
+  cache.delete(cacheKey(path, cwd))
+}
 
 /** Read one file through the host half, LRU-cached; null when unavailable. */
 async function readCached(path: string, cwd: string | undefined): Promise<string | null> {
-  const key = (cwd ?? '') + '\0' + path
+  const key = cacheKey(path, cwd)
+  const now = Date.now()
   const hit = cache.get(key)
   if (hit !== undefined) {
-    cache.delete(key)
-    cache.set(key, hit)
-    return hit
+    if (now - hit.at > CACHE_TTL_MS) {
+      cache.delete(key)
+    } else {
+      cache.delete(key)
+      cache.set(key, hit)
+      return hit.text
+    }
   }
   const result = await hostCall<{ kind: string; content?: string }>('files.read', { cwd, path })
   if (result === null || result.kind !== 'text' || typeof result.content !== 'string') return null
-  cache.set(key, result.content)
+  if (result.content.length > BOOST_MAX_CHARS) return null
+  cache.set(key, { text: result.content, at: now })
   if (cache.size > CACHE_CAP) {
     const oldest = cache.keys().next().value
     if (oldest !== undefined) cache.delete(oldest)
@@ -114,6 +135,12 @@ export async function boostEditHunks(
   path: string,
   cwd: string | undefined,
 ): Promise<readonly DiffHunk[]> {
+  // Legacy entry kept for the check script; production callers use
+  // prepareDiffWindow (budgeted). Guard the budget here too so direct
+  // callers cannot turn locateOnce quadratic on giant inputs.
+  for (const hunk of diffs) {
+    if (contentLines(hunk.newText).length > ALIGN_MAX_SIDE_LINES || contentLines(hunk.oldText ?? '').length > ALIGN_MAX_SIDE_LINES) return diffs
+  }
   let hasArg = false
   for (const hunk of diffs) {
     if (isArgHunk(hunk)) {
