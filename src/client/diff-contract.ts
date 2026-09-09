@@ -7,11 +7,18 @@
  * row with the same shape, and interface merging accepts the duplicate
  * identical declaration. Adapted from dsh-diff-viewer's proven contract, with
  * one behavioural addition the stock model lacks: the call-time argument
- * fallback (the PTC/code-dispatch path, whose calls carry no wire view).
+ * fallback (the PTC dispatch path — `tool/code-dispatch*` on old kernels,
+ * `tool/ptc-dispatch*` on new — whose calls carry no wire view).
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { changedLineCounts, terminatorOnly } from './diff-align.ts'
+
+/** Where in a file an open should land (mirrors stock `OpenFileOptions`). */
+export interface OpenFileOptions {
+  /** 1-based line to reveal; absent = the file's beginning. */
+  readonly line?: number
+}
 
 /** What the stock ui-tool rows pass to the `tool.call.toolview` keyed slots. */
 export interface ToolCallOwnerProps {
@@ -25,13 +32,18 @@ export interface ToolCallOwnerProps {
   cwd?: string | undefined
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
-  /** Open a Tool argument path through the Host. */
-  openFile: (path: string) => void
+  /**
+   * Open a Tool argument path. Stock `ui-tool` passes `OpenFileOptions` on
+   * harness >= 0.1.5-alpha.1 (`TurnTail` stays single-arg); this plugin takes
+   * no line source, so it calls with the path alone on every kernel.
+   */
+  openFile: (path: string, options?: OpenFileOptions) => void
   /**
    * Dual-kernel收容: harness 0.1.3-alpha.2 起 stock owner 新增必填 `loadImage`
    * (图片槽 `tool.call.images` 的会话授权加载器,本插件不消费)。声明为可选
    * `unknown` —— rc.1 无此字段时缺席合法,alpha.2 有此字段时忽略合法;
    * `unknown` 避免引入新类型依赖,纯类型位不触达 client 打包纯度门。
+   * harness 0.1.5-alpha.1 保留该字段,语义不变,仍不消费。
    */
   loadImage?: unknown
   /** Inspect this call in the trajectory view when available. */
@@ -175,7 +187,7 @@ export function isMutationToolName(name: string): boolean {
  * which also represents an overwrite without prior content), and the opt-in
  * str_replace_editor maps its create/str_replace/insert commands to
  * the same shapes over its `path`/`old_str`/`new_str`/`file_text` arguments
- * (its read-only `view` maps to nothing). Code Dispatch sub-calls never carry
+ * (its read-only `view` maps to nothing). PTC dispatch sub-calls never carry
  * a wire view (the dispatch bridge logs no presentation metadata), so this
  * args fallback is the only diff material those cards can render — mirroring
  * what the stock row shows for the same call while running.
@@ -267,7 +279,7 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
   // Settled: the applied hunks recorded in the result's wire meta.
   const applied = narrowDiffs(metaDiffs(block.meta))
   if (applied !== null) return { card: { diffs: applied } }
-  // A settled code-dispatch sub-call carries no meta (the dispatch bridge
+  // A settled PTC dispatch sub-call carries no meta (the dispatch bridge
   // logs no presentation metadata). Successful mutations fall back to the
   // call-time diff from args; errored ones stay on the generic error path,
   // exactly like the stock row (which surfaces the model-facing error text).
@@ -280,7 +292,7 @@ export function diffCardModel(block: ToolCallBlock): DiffCardModel | null {
 /**
  * The diff hunks for one settled mutation, in the authoritative order: the
  * applied hunks from the result's wire `meta`, then the argument fallback
- * (the Code Dispatch path). The order is the documented contract — a window
+ * (the PTC dispatch path). The order is the documented contract — a window
  * that dropped the call head must still render from meta, and a PTC sub-call
  * with no meta renders from args.
  * @returns the hunks, or null when this call carries no diff material.

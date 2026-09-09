@@ -310,7 +310,7 @@ assert.equal(mergedTurn[0].diffs.length, 2)
 assert.equal(mergedTurn[1].path, 'g.ts')
 
 // 16. turn-changes route/fold — the pagination-boundary claim: wire
-//     code-dispatch records carry no turn coordinate, so the accumulator
+//     dispatch (`code-dispatch`/`ptc-dispatch`) records carry no turn coordinate, so the accumulator
 //     learns rootCallId → Turn from the tool/call match and routes the
 //     dispatch record to the same Turn; a window that dropped tool/call (and
 //     even turn/start) still folds from the engine Location and claims the
@@ -336,8 +336,22 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   }
   // Match phase: the tool/call learns the root mapping; the dispatch record
   // (object args, no turn field — the current wire) routes to the same Turn.
+  // Dual vocabulary: old `code-dispatch` and new `ptc-dispatch` (+ `-start`) route identically.
+  const dispatchEventNew = {
+    type: 'tool/ptc-dispatch',
+    data: {
+      rootCallId, parentCallId: rootCallId, subCallId: rootCallId + ':ptc:1',
+      name: 'edit', arguments: { file_path: 'a.ts', old_string: 'x', new_string: 'y' },
+      isError: false,
+    },
+  }
+  const dispatchStartOld = { type: 'tool/code-dispatch-start', data: { rootCallId, parentCallId: rootCallId, subCallId: rootCallId + ':code:1' } }
+  const dispatchStartNew = { type: 'tool/ptc-dispatch-start', data: { rootCallId, parentCallId: rootCallId, subCallId: rootCallId + ':ptc:1' } }
   assert.deepEqual(turnChangesDefinition.match(callEvent), { id: String(turn), role: 'update' })
   assert.deepEqual(turnChangesDefinition.match(dispatchEvent), { id: String(turn), role: 'update' })
+  assert.deepEqual(turnChangesDefinition.match(dispatchEventNew), { id: String(turn), role: 'update' })
+  assert.deepEqual(turnChangesDefinition.match(dispatchStartOld), { id: String(turn), role: 'update' })
+  assert.deepEqual(turnChangesDefinition.match(dispatchStartNew), { id: String(turn), role: 'update' })
   // Fold phase: window starts mid-run — no turn/start, no tool/call — the
   // engine Location seeds the turn; dispatch hunks are null on this wire
   // (object args) but the PTC evidence still sets hasCodeDispatch.
@@ -353,6 +367,15 @@ assert.equal(mergedTurn[1].path, 'g.ts')
   assert.equal(locationData.value.changed.length, 0)
   // The claim mounts (empty match — the card joins the files from the tree).
   assert.deepEqual(claimFor(locationData.value, 100), EMPTY_CHANGED_FILES)
+  // New-vocabulary fold: `ptc-dispatch` seeds the same evidence from Location alone.
+  const locationDataNew = turnChangesDefinition.buildLocationData({
+    matches: [
+      { event: dispatchEventNew, role: 'update', location: { kind: 'turn', turn: { turn } } },
+      { event: resultEvent, role: 'update', location: { kind: 'turn', turn: { turn } } },
+    ],
+  }, 'turn')
+  assert.ok(locationDataNew !== null)
+  assert.equal(locationDataNew.value.hasCodeDispatch, true)
 }
 
 // 17. undo-plan — the turn snapshot tells an overwrite from a creation: a

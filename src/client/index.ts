@@ -7,19 +7,22 @@
  * uninstalling this plugin restores the stock rows with no configuration. The
  * takeover row adds the inline +N −M badge and renders full diffs through the
  * stock DiffBlock; its derivation carries the argument fallback that keeps
- * Code Dispatch (PTC) sub-calls visible.
+ * PTC dispatch sub-calls visible (`code-dispatch` on old kernels, `ptc-dispatch` on new).
  *
  * R2: accumulates each Turn's successful file mutations (native views with
  * the same argument fallback) and claims the chat turn-tail chain with a
  * collapsible per-turn summary card.
  *
  * Kernel contract: DeepSeek Harness >= 0.1.2-rc.1 (single build covers the
- * rc line and 0.1.3-alpha.2). The `uiConversation` event registry, the
- * `tool.call.toolview` keyed slot and the `conversation.chat.turnTail` chain
- * all carry their 0.1.2-rc.1+ shapes (verified against DSH master 76fda72979
- * and dsh-v0.1.3-alpha.2 e379fa8bdd: the only owner-currency delta is the new
- * optional `loadImage`, which this plugin accepts and ignores — re-verify per
- * new rc); harnesses before that line need dsh-diff-stat <= 0.1.6.
+ * rc line, 0.1.3-alpha.2 and 0.1.5-alpha.1). The `uiConversation` event registry,
+ * the `tool.call.toolview` keyed slot and the `conversation.chat.turnTail` chain
+ * all carry their 0.1.2-rc.1+ shapes (verified against dsh-v0.1.5-alpha.1:
+ * the owner deltas are the optional `loadImage` (since 0.1.3-alpha.2, accepted
+ * and ignored) and the optional `OpenFileOptions` second arg on
+ * `ToolCallOwnerProps.openFile` (since 0.1.5-alpha.1, path-only calls stay
+ * valid); PTC dispatch arrives as `tool/code-dispatch(-start)` on old kernels
+ * and `tool/ptc-dispatch(-start)` on new, both accepted — re-verify per new
+ * rc); harnesses before that line need dsh-diff-stat <= 0.1.6.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'

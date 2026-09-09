@@ -3,10 +3,16 @@
  * model-free: files and hunks come from the wire layer — the applied hunks
  * the mutation tools persist on the tool/result event's `meta`
  * (FsDiffMeta, the harness >= 0.1.2-rc.1 contract),
- * or the argument fallback for Code Dispatch (PTC) sub-calls, whose wire
+ * or the argument fallback for PTC dispatch sub-calls, whose wire
  * records carry no meta — never from the closing prose. Structure follows
  * the official ui-deliverables turn accumulator (publishes Turn data,
  * renders no view Node of its own).
+ *
+ * PTC vocabulary note: harness <= 0.1.3-alpha.2 logs dispatch as
+ * `tool/code-dispatch(-start)`, harness >= 0.1.5-alpha.1 as
+ * `tool/ptc-dispatch(-start)` (bad4254d71, with a v2→v3 identity-preserving
+ * migration). This accumulator accepts both, so one build covers old
+ * sessions/history and new live turns.
  */
 import { isAppendSurfaceEvent } from '@deepseek-ai/dsh-session/surface'
 import type { ConversationMatch, ConversationNodeDefinition } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -25,9 +31,12 @@ interface ChangedEntry {
 /** Immutable changed-file facts published against one Turn. */
 export interface TurnChangesTurnData {
   readonly changed: readonly ChangedEntry[]
-  /** Whether any run_code root call started in this Turn: its edit/write
-   *  sub-calls carry no turn coordinate, so the card joins them from the chat
-   *  tool tree instead of the accumulator. */
+  /** Whether any run_code root call started in this Turn (PTC dispatch):
+   *  its edit/write sub-calls carry no turn coordinate, so the card joins
+   *  them from the chat tool tree instead of the accumulator. The name stays
+   *  `hasCodeDispatch` for published Turn-data compatibility; it covers both
+   *  `code-dispatch` (<= 0.1.3-alpha.2) and `ptc-dispatch` (>= 0.1.5-alpha.1).
+   */
   readonly hasCodeDispatch: boolean
 }
 
@@ -76,9 +85,25 @@ export function basename(path: string): string {
   return at === -1 ? path : path.slice(at + 1)
 }
 
-/** Loose event view for the wire-only code-dispatch record. */
-function codeDispatchData(event: { readonly type: string; readonly data?: unknown }): Record<string, unknown> | null {
-  if (event.type !== 'tool/code-dispatch') return null
+/**
+ * Loose event view for the wire-only PTC dispatch record.
+ *
+ * Dual-vocabulary收容: harness <= 0.1.3-alpha.2 emits
+ * `tool/code-dispatch` / `tool/code-dispatch-start`, harness >= 0.1.5-alpha.1
+ * emits `tool/ptc-dispatch` / `tool/ptc-dispatch-start` (bad4254d71). Both
+ * start and settling records are evidence only (see applyUpdateState); the
+ * `-start` variant matters for pagination windows where the settling record
+ * has not arrived yet.
+ */
+function dispatchData(event: { readonly type: string; readonly data?: unknown }): Record<string, unknown> | null {
+  if (
+    event.type !== 'tool/code-dispatch'
+    && event.type !== 'tool/ptc-dispatch'
+    && event.type !== 'tool/code-dispatch-start'
+    && event.type !== 'tool/ptc-dispatch-start'
+  ) {
+    return null
+  }
   return (event.data ?? {}) as Record<string, unknown>
 }
 
@@ -99,7 +124,7 @@ const selectMemo = new WeakMap<object, Map<number, readonly ChangedFile[] | null
 
 /**
  * rootCallId → Turn learned from `tool/call` matches, for routing wire
- * code-dispatch records that omit the dispatch turn coordinate. Call ids are
+ * PTC dispatch (`code-dispatch`/`ptc-dispatch`) records that omit the dispatch turn coordinate. Call ids are
  * minted once per session (globally unique), so entries never collide across
  * sessions or window reloads; stale entries simply stop matching and fade.
  * Bounded defensively: entries are one small record per run_code call, so the
@@ -170,10 +195,10 @@ function applyUpdateState(state: TurnChangesState, match: ConversationMatch): Tu
       changed: [...state.changed, { seq: match.event.seq, path, diffs: hunks }],
     }
   }
-  const dispatch = codeDispatchData(match.event)
+  const dispatch = dispatchData(match.event)
   if (dispatch !== null) {
     // PTC evidence stands on its own: a dispatch record exists only inside a
-    // run_code run, so this turn ran code dispatch. Hunks NEVER come from the
+    // run_code run, so this turn ran PTC dispatch. Hunks NEVER come from the
     // record's args here — the wire carries an arguments object, and the card
     // joins the files from the chat tool tree. Deriving hunks from a string
     // form would double-count with that join, so the record contributes
@@ -237,7 +262,7 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
   match: (event) => {
     if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
     if (event.type === 'tool/call') {
-      // Learn rootCallId → Turn, the coordinate wire code-dispatch records
+      // Learn rootCallId → Turn, the coordinate wire PTC dispatch records
       // lack: a pagination boundary can drop the root call's tool/call from
       // the window while its dispatch records survive it, and the stock
       // tool-call fallbackState still renders the sub-rows from those — the
@@ -259,7 +284,7 @@ export const turnChangesDefinition: ConversationNodeDefinition<TurnChangesState>
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
       return { id: String(event.data.turn), role: 'update' }
     }
-    const dispatch = codeDispatchData(event)
+    const dispatch = dispatchData(event)
     if (dispatch !== null) {
       // The wire omits a turn coordinate on dispatch records, so route by the
       // Turn learned from the root call's tool/call. Neither available → this

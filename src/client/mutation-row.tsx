@@ -9,7 +9,7 @@
  * dsh-diff-stat's additions over stock:
  *  - an inline **+N −M** badge at the collapsed row end (visible while running,
  *    from the argument-derived estimate; exact once the result view lands);
- *  - the argument fallback in the diff derivation, so Code Dispatch (PTC)
+ *  - the argument fallback in the diff derivation, so PTC dispatch
  *    sub-calls — which carry no wire view — still get a full diff on expand.
  */
 import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
@@ -126,8 +126,9 @@ export interface MutationRowProps {
   cwd?: string | undefined
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
-  openFile: (path: string) => void
-  /** Dual-kernel收容(见 diff-contract ToolCallOwnerProps):alpha.2 新增,本行不消费。 */
+  /** Mirrors stock `OpenFileOptions`: new kernels may pass `{ line }`; this row calls path-only. */
+  openFile: (path: string, options?: { readonly line?: number }) => void
+  /** Dual-kernel收容(见 diff-contract ToolCallOwnerProps):alpha.2 新增,0.1.5-alpha.1 保留,本行不消费。 */
   loadImage?: unknown
   inspect?: (() => void) | undefined
 }
