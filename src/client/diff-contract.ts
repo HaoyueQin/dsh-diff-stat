@@ -6,12 +6,11 @@
  * own single-sided slot declaration (the stock ui-tool package is not a
  * dependency, so no duplicate-merge proof exists here): it must be kept in
  * step with the stock owner by re-verifying each new harness (last verified
- * dsh-v0.1.5-alpha.1: `OpenFileOptions { readonly line?: number }` matches
- * stock field-for-field; `loadImage` stays accepted-and-ignored). Adapted
- * from dsh-diff-viewer's proven contract, with one behavioural addition the
- * stock model lacks: the call-time argument fallback (the PTC dispatch
- * path — `tool/code-dispatch*` on old kernels, `tool/ptc-dispatch*` on
- * new — whose calls carry no wire view).
+ * dsh-v0.1.5-rc.1: `OpenFileOptions { readonly line?: number }` matches
+ * stock field-for-field). Adapted from dsh-diff-viewer's proven contract,
+ * with one behavioural addition the stock model lacks: the call-time
+ * argument fallback (the PTC dispatch path — `tool/ptc-dispatch*` — whose
+ * calls carry no wire view).
  */
 import type { DiffHunk } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -36,20 +35,11 @@ export interface ToolCallOwnerProps {
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
   /**
-   * Open a Tool argument path. Stock `ui-tool` passes `OpenFileOptions` on
-   * harness >= 0.1.5-alpha.1 (`TurnTail` stays single-arg); this plugin takes
-   * no line source, so it calls with the path alone on every kernel.
+   * Open a Tool argument path. Stock `ui-tool` may pass `OpenFileOptions`
+   * (`TurnTail` stays single-arg); this plugin takes no line source, so it
+   * calls with the path alone.
    */
   openFile: (path: string, options?: OpenFileOptions) => void
-  /**
-   * Dual-kernel handling: stock owner added `loadImage` in harness
-   * 0.1.3-alpha.2 (the session-authorized loader for `tool.call.images`,
-   * never consumed here) and keeps it in 0.1.5-alpha.1. Declared optional
-   * `unknown` — absent on rc.1, ignored on newer; `unknown` avoids a new
-   * type dependency so this pure-type slot stays inside the client bundle
-   * purity gate.
-   */
-  loadImage?: unknown
   /** Inspect this call in the trajectory view when available. */
   inspect?: (() => void) | undefined
 }
@@ -190,8 +180,8 @@ export function diffStats(diffs: readonly DiffHunk[]): DiffStats {
 /**
  * Whether a wire Tool name is one of the file-mutation tools this plugin
  * takes over and counts. `str_replace_editor` is the opt-in editor (off by
- * default since harness 0.1.3-alpha.2; command-dispatched: create /
- * str_replace / insert; its read-only `view` maps to no hunks below).
+ * default; command-dispatched: create / str_replace / insert; its read-only
+ * `view` maps to no hunks below).
  * @param name - the wire Tool name.
  */
 export function isMutationToolName(name: string): boolean {
@@ -262,9 +252,8 @@ function callToolName(block: ToolCallBlock): string {
 
 /**
  * The `diffs` array of an opaque tool/result `meta` payload, or null. The
- * edit/write tools persist `FsDiffMeta = { diffs: FileDiff[] }` there (the
- * harness >= 0.1.2-rc.1 contract), making the wire meta the one applied diff
- * source this plugin reads.
+ * edit/write tools persist `FsDiffMeta = { diffs: FileDiff[] }` there, making
+ * the wire meta the one applied diff source this plugin reads.
  */
 export function metaDiffs(meta: unknown): unknown {
   if (meta === null || typeof meta !== 'object') return null

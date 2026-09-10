@@ -37,6 +37,8 @@ export const inject = ['webServer']
 
 /** The plugin's own API prefix (package name; '/'-safe in a URL path). */
 const API_PREFIX = '/dsh-diff-stat/api'
+/** Bound a bridged Host reveal; a hung Host must not hold the request open. */
+const OPEN_BRIDGE_TIMEOUT_MS = 10_000
 /** Read cap in bytes; larger text files answer with truncated: true. */
 const READ_CAP = 512 * 1024
 /** Request body cap — undo payloads carry hunks, so allow a few MiB. */
@@ -49,6 +51,19 @@ interface WebServerService {
     path: string
     handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
   }): () => void
+}
+
+/**
+ * Structural contract of the host sessionController service (typert namespace
+ * 'session'), declared the same way as the webServer contract above so the host
+ * half keeps no runtime import of the session-controller package. An absent
+ * service disables file-manager reveal only; every other endpoint keeps working.
+ */
+interface SessionControllerService {
+  openWorkspacePath(
+    request: { path: string; action?: 'reveal' },
+    signal: AbortSignal,
+  ): Promise<{ opened: boolean }>
 }
 
 /** One reversible hunk as the client's turn accumulator recorded it. */
@@ -236,8 +251,22 @@ async function undoFile(cwd: string, session: string, turn: number | undefined, 
   }
 }
 
-/** Spawn one of the two whitelisted openers; both are fire-and-forget. */
-function openWith(cwd: string, requestedPath: string, target: unknown): Promise<void> {
+/**
+ * Open one fenced path. File-manager reveal (explorer) rides the harness's own
+ * sessionController remote — the same handoff ui-deliverables uses — so the
+ * platform-specific command stays the harness's business and this plugin spawns
+ * nothing for it. VS Code stays a local spawn: the harness exposes no equivalent.
+ * @param sessionController - host session-controller service; absent disables reveal.
+ * @param cwd - session workspace root the path is fenced against.
+ * @param requestedPath - absolute or workspace-relative path from the card.
+ * @param target - the requested opener.
+ */
+function openWith(
+  sessionController: SessionControllerService | undefined,
+  cwd: string,
+  requestedPath: string,
+  target: unknown,
+): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
     void (async () => {
       try {
@@ -245,55 +274,57 @@ function openWith(cwd: string, requestedPath: string, target: unknown): Promise<
         // become a probe for paths outside the session workspace. Only the
         // target (never the bytes) is needed — the opener takes the path.
         const resolvedTarget = await resolveTarget(cwd, requestedPath)
-        // Both openers run a quoted command line through the shell, and cmd
-        // expands %VAR% inside quotes — a name like report%TEMP%.md would
-        // silently open something else. NTFS forbids quotes in names anyway;
-        // reject both characters up front on the value that reaches the line.
-        // &|; and friends stay literal inside double quotes (no separator
-        // role) and filenames like R&D.md must keep working, so the minimal
-        // quote-breakout + expansion blacklist is intentional, not an
-        // allowlist omission. Delayed `!` expansion is off for direct spawn.
-        if (/["%\r\n]/.test(resolvedTarget.filename)) {
-          rejectPromise(new Error('path contains a shell-special character (quote or %)'))
+        if (target === 'explorer') {
+          // File-manager reveal is a Host handoff — the harness owns the
+          // platform command — so a hung Host must not hold the fetch open;
+          // the caller answers 500 through the catch below instead.
+          if (sessionController === undefined) {
+            rejectPromise(new Error('sessionController service absent: file-manager reveal unavailable'))
+            return
+          }
+          await sessionController.openWorkspacePath(
+            { path: resolvedTarget.filename, action: 'reveal' },
+            AbortSignal.timeout(OPEN_BRIDGE_TIMEOUT_MS),
+          )
+          resolvePromise()
           return
         }
-        if (target === 'explorer' || target === 'vscode') {
+        if (target === 'vscode') {
+          // A quoted command line runs through the shell, and cmd expands
+          // %VAR% inside quotes — a name like report%TEMP%.md would silently
+          // open something else. NTFS forbids quotes in names anyway; reject
+          // both characters up front on the value that reaches the line.
+          // &|; and friends stay literal inside double quotes (no separator
+          // role) and filenames like R&D.md must keep working, so the minimal
+          // quote-breakout + expansion blacklist is intentional, not an
+          // allowlist omission. Delayed `!` expansion is off for direct spawn.
+          if (/["%\r\n]/.test(resolvedTarget.filename)) {
+            rejectPromise(new Error('path contains a shell-special character (quote or %)'))
+            return
+          }
           // A missing opener must fail visibly, not "succeed": spawn with
-          // shell:true always starts cmd, so a missing explorer/code only
-          // surfaces as a nonzero exit inside the shell — the 'error' event
-          // never fires and the timeouts below would report success. Probe
-          // the shim first (where is cmd built-in).
-          const probe = spawn('where', [target === 'explorer' ? 'explorer' : 'code'], { shell: false })
+          // shell:true always starts cmd, so a missing code only surfaces as a
+          // nonzero exit inside the shell — the 'error' event never fires and
+          // the timeout below would report success. Probe the shim first
+          // (where is cmd built-in).
+          const probe = spawn('where', ['code'], { shell: false })
           const probeExit = await new Promise<number>((resolveProbe) => {
             probe.once('error', () => resolveProbe(-1))
             probe.once('exit', (code) => resolveProbe(code ?? -1))
           })
           probe.kill()
           if (probeExit !== 0) {
-            rejectPromise(new Error(target === 'explorer' ? 'explorer is not available on this system' : 'code (VS Code CLI) is not available on this system'))
+            rejectPromise(new Error('code (VS Code CLI) is not available on this system'))
             return
           }
-        }
-        if (target === 'explorer') {
-          // explorer /select,"<path>" reveals the file in its folder. The
-          // quoting CANNOT survive spawn's array form: Node re-escapes the
-          // embedded quotes and explorer, seeing a mangled argument, falls
-          // back to its default view. Pass the literal line through the shell.
-          const child = spawn('explorer /select,"' + resolvedTarget.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
-          child.unref()
-          child.once('error', rejectPromise)
-          // explorer returns a nonzero/late exit by design; the spawn
-          // succeeding is the signal.
-          setTimeout(() => resolvePromise(), 300)
-        } else if (target === 'vscode') {
           // code is a .cmd shim on Windows; shell: true resolves it.
           const child = spawn('code "' + resolvedTarget.filename + '"', { shell: true, detached: true, stdio: 'ignore' })
           child.unref()
           child.once('error', rejectPromise)
           setTimeout(() => resolvePromise(), 300)
-        } else {
-          rejectPromise(new Error('unknown open-with target'))
+          return
         }
+        rejectPromise(new Error('unknown open-with target'))
       } catch (error) {
         rejectPromise(error)
       }
@@ -492,6 +523,9 @@ function respond(res: ServerResponse, status: number, payload: unknown): void {
 
 export function apply(ctx: Context): void {
   const webServer = (ctx as Context & { webServer?: WebServerService }).webServer
+  // Optional by design: a profile without the session-controller service keeps
+  // every endpoint except file-manager reveal, which then answers 500.
+  const sessionController = (ctx as Context & { sessionController?: SessionControllerService }).sessionController
   if (webServer === undefined) {
     // Host half is optional by design (client degrades: no 撤销/内嵌查看/定向打开).
     ctx.logger?.warn?.('[dsh-diff-stat] webServer service absent — fenced file API disabled')
@@ -575,7 +609,7 @@ export function apply(ctx: Context): void {
           return
         }
         if (action === 'open-with') {
-          await openWith(String(body['cwd'] ?? ''), String(body['path'] ?? ''), body['target'])
+          await openWith(sessionController, String(body['cwd'] ?? ''), String(body['path'] ?? ''), body['target'])
           respond(res, 200, { ok: true })
           return
         }

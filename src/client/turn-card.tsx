@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  IconChevronDownOutline14, IconChevronRightOutline14,
+  FileTypeIcon, IconChevronDownOutline14, IconChevronRightOutline14,
   IconCopyOutline16, IconFolderOpen16, Menu, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TurnTailOwnerProps } from '@deepseek-ai/dsh-client-ui-chat/client'
@@ -29,7 +29,6 @@ import { hostAvailable, hostCall } from './api.ts'
 import { FilePeek } from './file-peek.tsx'
 import { DiffWindow } from './diff-window.tsx'
 import { ExternalLinkIcon, EyeIcon, VSCodeIcon } from './icons.tsx'
-import { FileTypeIcon } from './file-type-icon.tsx'
 import css from './turn-card.module.css'
 
 /** Directory part of a path, for the muted directory segment of a file row. */
@@ -302,7 +301,7 @@ export function TurnCard(props: TurnCardProps) {
             return (
               <div key={file.path} data-diff-stat-file={file.path}>
                 <div className={css.fileRow}>
-                  <span className={css.fileIcon} aria-hidden><FileTypeIcon path={file.path} /></span>
+                  <span className={css.fileIcon} aria-hidden><FileTypeIcon path={file.path} size={16} /></span>
                   <button
                     type="button"
                     className={css.fileName}

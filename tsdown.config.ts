@@ -49,9 +49,9 @@ const CLIENT_EXTERNALS: readonly string[] = [...PLATFORM_MODULES]
 
 /** Inline-safe @deepseek-ai wire layers with no shared runtime identity (the
  *  stock client preset's own INLINE_SAFE policy, narrowed to the pure layers
- *  this bundle actually pulls in): dsh-session's surface predicate (note:
- *  0.1.5-alpha.1 adds `system/message` to the inlined set — no behavior
- *  change here, the only call site filters `tool/result`), dsh-brand
+ *  this bundle actually pulls in): dsh-session's surface predicate (the
+ *  inlined set is the 0.1.5-rc.1 one; no behavior change here — the only call
+ *  site filters `tool/result`), dsh-brand
  *  branding helpers (kept in the pattern for parity; currently unimported)
  *  and the dsh-util-workspace-path display helpers are pure functions,
  *  inlined exactly like the stock ui bundles inline them — no module-table

@@ -1,19 +1,18 @@
 /**
  * Turn-scoped changed-file accumulator for dsh-diff-stat. Client-only and
  * model-free: files and hunks come from the wire layer — the applied hunks
- * the mutation tools persist on the tool/result event's `meta`
- * (FsDiffMeta, the harness >= 0.1.2-rc.1 contract),
+ * the mutation tools persist on the tool/result event's `meta` (FsDiffMeta),
  * or the argument fallback for PTC dispatch sub-calls, whose wire
  * records carry no meta — never from the closing prose. Structure follows
  * the official ui-deliverables turn accumulator (publishes Turn data,
  * renders no view Node of its own).
  *
- * PTC vocabulary note: harness <= 0.1.3-alpha.2 logs dispatch as
- * `tool/code-dispatch(-start)`, harness >= 0.1.5-alpha.1 as
- * `tool/ptc-dispatch(-start)` (bad4254d71, with a v2→v3 identity-preserving
- * migration). This accumulator accepts both, so one build covers old
- * sessions/history and new live turns. `-start` records carry no file args
- * and contribute evidence only (never hunks).
+ * PTC vocabulary note: current kernels log dispatch as
+ * `tool/ptc-dispatch(-start)` (bad4254d71 renamed it from the retired
+ * `tool/code-dispatch(-start)` with a v2→v3 identity-preserving migration).
+ * This accumulator still matches the retired spelling so history recorded by
+ * an older kernel keeps routing. `-start` records carry no file args and
+ * contribute evidence only (never hunks).
  *
  * Cold-open limit (best-effort): a dispatch record whose rootCallId was
  * never learned from its root `tool/call` cannot be routed and stays outside
@@ -40,8 +39,8 @@ export interface TurnChangesTurnData {
   /** Whether any run_code root call started in this Turn (PTC dispatch):
    *  its edit/write sub-calls carry no turn coordinate, so the card joins
    *  them from the chat tool tree instead of the accumulator. The name stays
-   *  `hasCodeDispatch` for published Turn-data compatibility; it covers both
-   *  `code-dispatch` (<= 0.1.3-alpha.2) and `ptc-dispatch` (>= 0.1.5-alpha.1).
+   *  `hasCodeDispatch` for published Turn-data compatibility; it covers the
+   *  current `ptc-dispatch` and the retired `code-dispatch` spelling.
    */
   readonly hasCodeDispatch: boolean
 }
@@ -101,12 +100,12 @@ export function basename(path: string): string {
 /**
  * Loose event view for the wire-only PTC dispatch record.
  *
- * Dual-vocabulary handling: harness <= 0.1.3-alpha.2 emits
- * `tool/code-dispatch` / `tool/code-dispatch-start`, harness >= 0.1.5-alpha.1
- * emits `tool/ptc-dispatch` / `tool/ptc-dispatch-start` (bad4254d71). Both
- * start and settling records are evidence only (see applyUpdateState); the
- * `-start` variant matters for pagination windows where the settling record
- * has not arrived yet.
+ * Current kernels emit `tool/ptc-dispatch` / `tool/ptc-dispatch-start`
+ * (bad4254d71). The retired `tool/code-dispatch(-start)` spelling stays
+ * matched so a session recorded before that rename still routes its dispatch
+ * records. Both start and settling records are evidence only (see
+ * applyUpdateState); the `-start` variant matters for pagination windows
+ * where the settling record has not arrived yet.
  */
 function dispatchData(event: { readonly type: string; readonly data?: unknown }): Record<string, unknown> | null {
   if (

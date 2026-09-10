@@ -126,10 +126,8 @@ export interface MutationRowProps {
   cwd?: string | undefined
   /** Host account home; POSIX home-rooted summaries display as `~`. */
   home?: string | undefined
-  /** Mirrors stock `OpenFileOptions`: new kernels may pass `{ line }`; this row calls path-only. */
+  /** Mirrors stock `OpenFileOptions`: the stock row may pass `{ line }`; this row calls path-only. */
   openFile: (path: string, options?: OpenFileOptions) => void
-  /** Dual-kernel handling (see diff-contract ToolCallOwnerProps): added in alpha.2, kept in 0.1.5-alpha.1, never consumed here. */
-  loadImage?: unknown
   inspect?: (() => void) | undefined
 }
 

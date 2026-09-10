@@ -13,16 +13,13 @@
  * the same argument fallback) and claims the chat turn-tail chain with a
  * collapsible per-turn summary card.
  *
- * Kernel contract: DeepSeek Harness >= 0.1.2-rc.1 (single build covers the
- * rc line, 0.1.3-alpha.2 and 0.1.5-alpha.1). The `uiConversation` event registry,
- * the `tool.call.toolview` keyed slot and the `conversation.chat.turnTail` chain
- * all carry their 0.1.2-rc.1+ shapes (verified against dsh-v0.1.5-alpha.1:
- * the owner deltas are the optional `loadImage` (since 0.1.3-alpha.2, accepted
- * and ignored) and the optional `OpenFileOptions` second arg on
- * `ToolCallOwnerProps.openFile` (since 0.1.5-alpha.1, path-only calls stay
- * valid); PTC dispatch arrives as `tool/code-dispatch(-start)` on old kernels
- * and `tool/ptc-dispatch(-start)` on new, both accepted — re-verify per new
- * rc); harnesses before that line need dsh-diff-stat <= 0.1.6.
+ * Kernel contract: DeepSeek Harness >= 0.1.5-rc.1 — one build for that line
+ * only. The `uiConversation` event registry, the `tool.call.toolview` keyed
+ * slot and the `conversation.chat.turnTail` chain carry their 0.1.5-rc.1
+ * shapes, verified against the dsh-v0.1.5-rc.1 tag; re-verify per new rc.
+ * PTC dispatch arrives as `tool/ptc-dispatch(-start)`, with the retired
+ * `tool/code-dispatch(-start)` spelling still matched for old history.
+ * Kernels before this line need dsh-diff-stat <= 0.1.8.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -56,8 +53,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export const inject = ['slots', 'sessions', 'locale', 'uiConversation']
 
 /** The tool keys this plugin takes over (the wire tools that emit diff cards).
- *  `str_replace_editor` is the opt-in editor (off by default since harness
- *  0.1.3-alpha.2; kept so manually enabled profiles still get badges). */
+ *  `str_replace_editor` is the opt-in editor (off by default; kept so manually
+ *  enabled profiles still get badges). */
 const MUTATION_TOOLS = ['edit', 'write', 'str_replace_editor'] as const
 
 /**

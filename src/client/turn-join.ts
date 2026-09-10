@@ -20,8 +20,7 @@ import type { ChangedFile } from './turn-changes.ts'
 import { collectDispatchFiles } from './turn-merge.ts'
 
 /**
- * Structural faces of the stock chat projection the join reads (the harness
- * >= 0.1.2-rc.1 shape).
+ * Structural faces of the stock chat projection the join reads.
  */
 export interface TurnJoinStores {
   getTurn: (turn: number) => readonly string[]
