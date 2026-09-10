@@ -7,7 +7,9 @@
  * dependency, so no duplicate-merge proof exists here): it must be kept in
  * step with the stock owner by re-verifying each new harness (last verified
  * dsh-v0.1.5-rc.1: `OpenFileOptions { readonly line?: number }` matches
- * stock field-for-field). Adapted from dsh-diff-viewer's proven contract,
+ * stock field-for-field, and `loadImage` stays required-and-ignored — the
+ * stock owner supplies it for the `tool.call.images` child slot, this plugin
+ * never consumes it). Adapted from dsh-diff-viewer's proven contract,
  * with one behavioural addition the stock model lacks: the call-time
  * argument fallback (the PTC dispatch path — `tool/ptc-dispatch*` — whose
  * calls carry no wire view).
@@ -40,6 +42,15 @@ export interface ToolCallOwnerProps {
    * calls with the path alone.
    */
   openFile: (path: string, options?: OpenFileOptions) => void
+  /**
+   * Session-authorized image loader the stock owner always supplies
+   * (`ToolCallOwnerProps.loadImage` is required since harness 0.1.3-alpha.2,
+   * still required in 0.1.5-rc.1) for the `tool.call.images` child slot.
+   * Declared optional `unknown` and never consumed here — mutation tools
+   * carry no images; `unknown` avoids a new type dependency so this
+   * pure-type slot stays inside the client bundle purity gate.
+   */
+  loadImage?: unknown
   /** Inspect this call in the trajectory view when available. */
   inspect?: (() => void) | undefined
 }

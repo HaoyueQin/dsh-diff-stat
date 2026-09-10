@@ -7,7 +7,10 @@
  * imported from the registry. Re-copy when the stock stylesheet changes; keep
  * this file byte-identical to upstream apart from this header. Stock’s
  * .diffStat row-badge block rides along unused: the takeover row renders its
- * own +N −M badge (badge.module.css). The variable fallbacks below degrade
+ * own +N −M badge (badge.module.css). Upstream’s image-card rules
+ * (.imageBody/.imageLabel/.imageMeta, added after 0.1.2-rc.1) are
+ * intentionally NOT vendored: the takeover owns edit/write/str_replace_editor
+ * only, which never render image cards. The variable fallbacks below degrade
  * gracefully when the shell never defines the content font-size axis: rows
  * render at the fixed fallback size then.
  */

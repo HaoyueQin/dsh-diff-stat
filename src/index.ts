@@ -523,9 +523,6 @@ function respond(res: ServerResponse, status: number, payload: unknown): void {
 
 export function apply(ctx: Context): void {
   const webServer = (ctx as Context & { webServer?: WebServerService }).webServer
-  // Optional by design: a profile without the session-controller service keeps
-  // every endpoint except file-manager reveal, which then answers 500.
-  const sessionController = (ctx as Context & { sessionController?: SessionControllerService }).sessionController
   if (webServer === undefined) {
     // Host half is optional by design (client degrades: no 撤销/内嵌查看/定向打开).
     ctx.logger?.warn?.('[dsh-diff-stat] webServer service absent — fenced file API disabled')
@@ -609,6 +606,12 @@ export function apply(ctx: Context): void {
           return
         }
         if (action === 'open-with') {
+          // Resolved per request, never captured at apply() time: a profile
+          // that applies session-controller after this plugin would otherwise
+          // leave file-manager reveal permanently disabled for the host's
+          // lifetime. Absent by design on profiles without the service — only
+          // reveal answers 500 then; every other endpoint keeps working.
+          const sessionController = (ctx as Context & { sessionController?: SessionControllerService }).sessionController
           await openWith(sessionController, String(body['cwd'] ?? ''), String(body['path'] ?? ''), body['target'])
           respond(res, 200, { ok: true })
           return

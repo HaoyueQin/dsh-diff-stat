@@ -7,7 +7,9 @@
  * uninstalling this plugin restores the stock rows with no configuration. The
  * takeover row adds the inline +N −M badge and renders full diffs through the
  * stock DiffBlock; its derivation carries the argument fallback that keeps
- * PTC dispatch sub-calls visible (`code-dispatch` on old kernels, `ptc-dispatch` on new).
+ * PTC dispatch sub-calls visible (live `tool/ptc-dispatch*`; the retired
+ * `tool/code-dispatch*` spelling is still matched so pre-rename history keeps
+ * its rows).
  *
  * R2: accumulates each Turn's successful file mutations (native views with
  * the same argument fallback) and claims the chat turn-tail chain with a

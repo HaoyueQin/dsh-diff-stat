@@ -128,6 +128,8 @@ export interface MutationRowProps {
   home?: string | undefined
   /** Mirrors stock `OpenFileOptions`: the stock row may pass `{ line }`; this row calls path-only. */
   openFile: (path: string, options?: OpenFileOptions) => void
+  /** Stock-required image loader (see diff-contract ToolCallOwnerProps): supplied by the owner, never consumed here. */
+  loadImage?: unknown
   inspect?: (() => void) | undefined
 }
 
